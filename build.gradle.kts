@@ -1,3 +1,4 @@
+import io.ktor.plugin.features.DockerPortMapping
 
 val kotlin_version: String by project
 val logback_version: String by project
@@ -49,5 +50,13 @@ dependencies {
 //        implementation("org.jetbrains.exposed:exposed-json:$exposedVersion")
 //        implementation("org.jetbrains.exposed:exposed-money:$exposedVersion")
 //        implementation("org.jetbrains.exposed:exposed-spring-boot-starter:$exposedVersion")
+    }
+}
+
+ktor {
+    docker {
+        localImageName = "arknights-gacha-recorder"
+        imageTag = "latest"
+        portMappings.add(DockerPortMapping(8080, 8080))
     }
 }

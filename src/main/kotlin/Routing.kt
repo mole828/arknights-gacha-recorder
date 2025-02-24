@@ -154,5 +154,17 @@ fun Application.configureRouting() {
         }
 
 
+        post("/register") {
+            val tokenPerhaps = call.queryParameters["token"]
+            log.info("register: $tokenPerhaps")
+            requireNotNull(tokenPerhaps) { "token is required" }
+            val hgToken = ArkNights.HgToken(tokenPerhaps)
+            require(service.arkCenterApi.checkToken(hgToken))
+            val appToken = service.arkCenterApi.grantAppToken(hgToken)
+            val bindingList = service.arkCenterApi.bindingList(appToken)
+            val account = bindingList.list.first().bindingList.first()
+            service.upsert(account, hgToken)
+            call.respond(mapOf("msg" to "ok", "token" to hgToken.content))
+        }
     }
 }

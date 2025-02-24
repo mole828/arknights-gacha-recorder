@@ -155,9 +155,7 @@ interface ArkNights {
                 }
 
                 override suspend fun login(u8Token: U8Token): LoginCookie {
-                    val MEDIA_TYPE = "application/json".toMediaType()
-
-//                    val requestBody = "{\"token\":\"fUafm1z0/wdKp6ga+u2QsXfPdfNIIq+8NIXv8Ur2CKyqxG7HWL8eTvyjjpB8WL0SzQ7j0oHDttlb5Xua26OJqSMWMAwk0mlnl/s249YfHfLrBCAIlKdzICAaLglyg/S/AOX7Y2CTYQkVQqI5Dse0SmXhoMN0mdkpjVrPx09vc9o/j+tUTsqU\",\"source_from\":\"\",\"share_type\":\"\",\"share_by\":\"\"}"
+                    val mediaType = "application/json".toMediaType()
                     val requestBody = json.encodeToString(mapOf(
                         "token" to u8Token.token,
                         "source_from" to "",
@@ -166,23 +164,7 @@ interface ArkNights {
                     ))
                     val request = Request.Builder()
                         .url("https://ak.hypergryph.com/user/api/role/login")
-                        .post(requestBody.toRequestBody(MEDIA_TYPE))
-//                        .header("accept", "application/json, text/plain, */*")
-//                        .header("accept-language", "zh-CN,zh;q=0.9,zh-TW;q=0.8")
-//                        .header("baggage", "sentry-environment=production,sentry-release=ak-user-web%401.0.0,sentry-public_key=5d78d1a7ec71b4c3f7f9d08ddc0cf864,sentry-trace_id=88eebc46dcea4777b6f82b2df39ea8fd")
-//                        .header("content-type", "application/json")
-//                        .header("origin", "https://ak.hypergryph.com")
-//                        .header("priority", "u=1, i")
-//                        .header("referer", "https://ak.hypergryph.com/user/headhunting")
-//                        .header("sec-ch-ua", "\"Not(A:Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"")
-//                        .header("sec-ch-ua-mobile", "?0")
-//                        .header("sec-ch-ua-platform", "\"macOS\"")
-//                        .header("sec-fetch-dest", "empty")
-//                        .header("sec-fetch-mode", "cors")
-//                        .header("sec-fetch-site", "same-origin")
-//                        .header("sentry-trace", "88eebc46dcea4777b6f82b2df39ea8fd-9df2d6946063d859")
-//                        .header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
-//                        .header("cookie", "ak-user-center=nDhVczM4XvenHw3TbAbT98JN38AyTJBWSMCVdFvcyNjj8EVCn5AoT9NgZzqAmIbUFbSvVws3dAW3aKsD5aVpnFu7S6%2BeAY%2FfM%2BvbEzjwF80taTc8mZwBMNd%2BD%2BrUa97qh1w42iWGus%2BXSPFfPkNWAWaIB8BMCcvPWB%2FjQhnG60JpNmfKeVhdM5J8sBblQOdae%2BHnsSh5JusEBAbspLYKprYNLbMeyaFb1%2FXjKo1dUUyxXglPwAz6y0nz9XqOT6u7yUItbrF4zgdvHYj1uiFNOj8RN3GbX7dQHVwQOGe43KhsoQNL4%2B3AScJj8HTA84vFrUUvo6Ej4yXcja9i%2FM66LmQdJ36hsXLt3H3goqRZVSKU1ihaFHqkCXHLUupVkFJxvnrkwhXmBb5%2F3pNskGPLf3jC%2BF3exwIuiOT0sB%2FLEvg%3D")
+                        .post(requestBody.toRequestBody(mediaType))
                         .build()
 
                     val resp = client.newCall(request).execute()

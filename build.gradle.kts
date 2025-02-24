@@ -35,4 +35,19 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version")
 
     implementation("com.github.kittinunf.fuel:fuel:3.0.0-alpha04")
+
+    val exposedVersion: String = "0.59.0" // by project
+    dependencies {
+        implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+        implementation("org.jetbrains.exposed:exposed-crypt:$exposedVersion")
+        implementation("org.jetbrains.exposed:exposed-dao:$exposedVersion")
+        implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+
+        implementation("org.jetbrains.exposed:exposed-kotlin-datetime:$exposedVersion")
+
+        implementation("org.postgresql:postgresql:42.5.1")
+//        implementation("org.jetbrains.exposed:exposed-json:$exposedVersion")
+//        implementation("org.jetbrains.exposed:exposed-money:$exposedVersion")
+//        implementation("org.jetbrains.exposed:exposed-spring-boot-starter:$exposedVersion")
+    }
 }

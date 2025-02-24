@@ -1,10 +1,12 @@
 package com.example.api
 
 import com.example.api.ArkNights.Companion
+import com.example.service.GachaRecorder
 import fuel.FuelBuilder
 import kotlinx.coroutines.runBlocking
 import kotlinx.io.readString
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.Database
 import java.io.File
 
 import kotlin.test.Test
@@ -46,12 +48,26 @@ class ArkNightsApiTest {
                 loginCookie = loginCookie,
                 u8Token = u8Token,
                 uid = uid,
-                category = "spring_fest",
+                pool = ArkNights.GachaApi.Pool("spring_fest", ""),
                 size = 10u,
-                gachaTs = "1737532727523",
+                gachaTs = "1737532727523".toULong(),
                 pos = 8u,
             )
-//            println(re)
+            println(re)
+        }
+    }
+
+    @Test
+    fun testService() {
+        val db = Database.connect(
+            url="jdbc:postgresql://localhost:5432/app",
+            driver = "org.postgresql.Driver",
+            user = "app",
+            password = "app",
+        )
+        val service = GachaRecorder(db)
+        runBlocking {
+            service.update(hgToken)
         }
     }
 }

@@ -9,6 +9,6 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
-    install(ContentNegotiation){json()}
-    
+    install(ContentNegotiation){ json() }
+    configureRouting()
 }

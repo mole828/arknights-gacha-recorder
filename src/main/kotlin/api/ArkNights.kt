@@ -33,7 +33,7 @@ interface ArkNights {
     }
     @Serializable
     data class CheckTokenResponse(override val status: Int, override val msg: String, val type: String): BaseResponse
-    suspend fun checkToken(hgToken: HgToken) {
+    suspend fun checkToken(hgToken: HgToken): Boolean {
         val resp = fuel.get {
             url = "https://as.hypergryph.com/user/info/v1/basic"
             parameters = listOf(
@@ -42,7 +42,7 @@ interface ArkNights {
         }
         val body = resp.source.readString()
         val re = json.decodeFromString<CheckTokenResponse>(body)
-        require(re.ok())
+        return re.ok()
     }
 
     @Serializable
@@ -207,21 +207,18 @@ interface ArkNights {
         interface GachaInfo {
             val charId: String
             val charName: String
-            val gachaTs: String
+            val gachaTs: ULong
             val isNew: Boolean
             val poolId: String
             val poolName: String
             val pos: UInt // 十连出现的位置 单抽为0 十连为0-9
             val rarity: UInt // 0-5
-            fun primeKey(): String {
-                return "${gachaTs}_${pos}"
-            }
             companion object {
                 @Serializable
                 data class DefaultImpl(
                     override val charId: String,
                     override val charName: String,
-                    override val gachaTs: String,
+                    override val gachaTs: ULong,
                     override val isNew: Boolean,
                     override val poolId: String,
                     override val poolName: String,
@@ -231,13 +228,35 @@ interface ArkNights {
             }
         }
         interface Gacha : GachaInfo {
-            val uid: ULong // 用户id
-            override fun primeKey(): String {
-                return "${uid}_${super.primeKey()}"
+            val uid: Uid // 用户id
+            companion object {
+                @Serializable
+                data class DefaultImpl(
+                    override val uid: Uid,
+                    override val gachaTs: ULong,
+                    override val pos: UInt,
+                    override val charId: String,
+                    override val charName: String,
+                    override val poolId: String,
+                    override val poolName: String,
+                    override val rarity: UInt,
+                    override val isNew: Boolean,
+                ):  Gacha
+                fun from(uid: Uid, gachaInfo: GachaInfo): Gacha = DefaultImpl(
+                    uid = uid,
+                    gachaTs = gachaInfo.gachaTs,
+                    pos = gachaInfo.pos,
+                    charId = gachaInfo.charId,
+                    charName = gachaInfo.charName,
+                    poolId = gachaInfo.poolId,
+                    poolName = gachaInfo.poolName,
+                    rarity = gachaInfo.rarity,
+                    isNew = gachaInfo.isNew,
+                )
             }
         }
         @Serializable
-        data class GachaListData(val list: List<GachaInfo.Companion.DefaultImpl>)
+        data class GachaListData(val list: List<GachaInfo.Companion.DefaultImpl>, val hasMore: Boolean)
         @Serializable
         data class GachaResponse(
             val code: Int,
@@ -248,11 +267,11 @@ interface ArkNights {
             loginCookie: LoginCookie,
             u8Token: U8Token,
             uid: Uid,
-            category: String,
+            pool: Pool,
             size: UInt,
-            gachaTs: String? = null,
+            gachaTs: ULong? = null,
             pos: UInt? = null,
-        ) : List<GachaInfo>
+        ) : GachaListData
 
         companion object {
             fun default(): GachaApi {
@@ -262,20 +281,20 @@ interface ArkNights {
                         loginCookie: LoginCookie,
                         u8Token: U8Token,
                         uid: Uid,
-                        category: String,
+                        pool: Pool,
                         size: UInt,
-                        gachaTs: String?,
+                        gachaTs: ULong?,
                         pos: UInt?,
-                    ): List<GachaInfo> {
+                    ): GachaListData {
                         val url = "https://ak.hypergryph.com/user/api/inquiry/gacha/history"
                         val resp = fuel.get {
                             this.url = url
                             parameters = mutableListOf(
                                 "uid" to uid.toString(),
-                                "category" to "spring_fest",
+                                "category" to pool.id,
                                 "size" to size.toString(),
                             ).apply {
-                                gachaTs?.let { add("gachaTs" to it) }
+                                gachaTs?.let { add("gachaTs" to it.toString()) }
                                 pos?.let { add("pos" to it.toString()) }
                             }
                             headers = mapOf(
@@ -285,7 +304,7 @@ interface ArkNights {
                         }
                         val body = resp.source.readString()
                         val re = json.decodeFromString<GachaResponse>(body)
-                        return re.data.list
+                        return re.data
                     }
                 }
             }

@@ -4,12 +4,47 @@ import fuel.FuelBuilder
 import kotlinx.io.readString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 
 interface ArkNights {
+    interface BaseResponse {
+        val status: Int
+        val msg: String
+        ;
+        fun ok(): Boolean = status == 0
+        companion object {
+            @Serializable
+            data class DefaultImpl(
+                override val status: Int,
+                override val msg: String,
+            ): BaseResponse
+        }
+    }
+
     @JvmInline
+    @Serializable
     value class Uid(val value: ULong)
     @Serializable
-    data class HgToken (val content: String)
+    data class HgToken (val content: String) {
+        // 获取token: https://web-api.hypergryph.com/account/info/hg
+    }
+    @Serializable
+    data class CheckTokenResponse(override val status: Int, override val msg: String, val type: String): BaseResponse
+    suspend fun checkToken(hgToken: HgToken) {
+        val resp = fuel.get {
+            url = "https://as.hypergryph.com/user/info/v1/basic"
+            parameters = listOf(
+                "token" to hgToken.content,
+            )
+        }
+        val body = resp.source.readString()
+        val re = json.decodeFromString<CheckTokenResponse>(body)
+        require(re.ok())
+    }
+
     @Serializable
     data class HgTokenResponse (val code: Int, val data: HgToken, val msg: String)
     @Serializable
@@ -25,6 +60,24 @@ interface ArkNights {
     suspend fun grantAppToken(hgToken: HgToken): AppToken
 
     @Serializable
+    data class AccountInfo(
+        val channelMasterId: Int,
+        val channelName: String,
+        val isDefault: Boolean,
+        val isDeleted: Boolean,
+        val isOfficial: Boolean,
+        val nickName: String,
+        val uid: Uid,
+    )
+    @Serializable
+    data class AppBinding(val appCode: String, val appName: String, val bindingList: List<AccountInfo>)
+    @Serializable
+    data class MultiAppBindingList(val list: List<AppBinding>)
+    @Serializable
+    data class BindingListResponse(val status: Int, val msg: String, val data: MultiAppBindingList)
+    suspend fun bindingList(appToken: AppToken): MultiAppBindingList
+
+    @Serializable
     data class U8Token(val token: String)
     @Serializable
     data class U8TokenResponse(
@@ -34,15 +87,35 @@ interface ArkNights {
     )
     suspend fun u8TokenByUid(appToken: AppToken, uid: Uid): U8Token
 
+    suspend fun info(u8Token: U8Token) {
+        val resp = fuel.get {
+            url = "https://ak.hypergryph.com/user/api/role/info?source_from=&share_type=&share_by="
+            headers = mapOf(
+                "x-role-token" to u8Token.token,
+            )
+        }
+        TODO()
+    }
+    data class LoginCookie(val akUserCenterCookieContent: String) {
+        fun toPair(): Pair<String, String> = "ak-user-center" to akUserCenterCookieContent
+    }
+    suspend fun login(u8Token: U8Token): LoginCookie
+
+
     companion object {
         val fuel = FuelBuilder().build()
+        val client = OkHttpClient()
+        val json = Json {
+            ignoreUnknownKeys = true
+        }
+        fun cookie(map: Map<String, String>): String = map.map { (k, v) -> "$k=$v" }.joinToString("; ")
         fun default(): ArkNights {
             return object : ArkNights {
                 override suspend fun grantAppToken(hgToken: HgToken): AppToken {
                     val resp = fuel.post {
                         url = "https://as.hypergryph.com/user/oauth2/v2/grant"
                         headers = mapOf("content-type" to "application/json",)
-                        body = Json.encodeToString(ArkNights.GrantAppTokenPayload(
+                        body = Json.encodeToString(GrantAppTokenPayload(
                             appCode = "be36d44aa36bfb5b",
                             token = hgToken.content,
                             type = 1,
@@ -50,6 +123,18 @@ interface ArkNights {
                     }
                     val body = resp.source.readString()
                     return Json.decodeFromString<AppTokenResponse>(body).data
+                }
+
+                override suspend fun bindingList(appToken: AppToken): MultiAppBindingList {
+                    val resp = fuel.get {
+                        url = "https://binding-api-account-prod.hypergryph.com/account/binding/v1/binding_list"
+                        parameters = listOf(
+                            "token" to appToken.token,
+                            "appCode" to "arknights",
+                        )
+                    }
+                    val body = resp.source.readString()
+                    return Json.decodeFromString<BindingListResponse>(body).data
                 }
                 override suspend fun u8TokenByUid(appToken: AppToken, uid: Uid): U8Token {
                     val resp = fuel.post {
@@ -68,11 +153,75 @@ interface ArkNights {
                     requireNotNull(re.data)
                     return re.data
                 }
+
+                override suspend fun login(u8Token: U8Token): LoginCookie {
+                    val MEDIA_TYPE = "application/json".toMediaType()
+
+//                    val requestBody = "{\"token\":\"fUafm1z0/wdKp6ga+u2QsXfPdfNIIq+8NIXv8Ur2CKyqxG7HWL8eTvyjjpB8WL0SzQ7j0oHDttlb5Xua26OJqSMWMAwk0mlnl/s249YfHfLrBCAIlKdzICAaLglyg/S/AOX7Y2CTYQkVQqI5Dse0SmXhoMN0mdkpjVrPx09vc9o/j+tUTsqU\",\"source_from\":\"\",\"share_type\":\"\",\"share_by\":\"\"}"
+                    val requestBody = json.encodeToString(mapOf(
+                        "token" to u8Token.token,
+                        "source_from" to "",
+                        "share_type" to "",
+                        "share_by" to "",
+                    ))
+                    val request = Request.Builder()
+                        .url("https://ak.hypergryph.com/user/api/role/login")
+                        .post(requestBody.toRequestBody(MEDIA_TYPE))
+//                        .header("accept", "application/json, text/plain, */*")
+//                        .header("accept-language", "zh-CN,zh;q=0.9,zh-TW;q=0.8")
+//                        .header("baggage", "sentry-environment=production,sentry-release=ak-user-web%401.0.0,sentry-public_key=5d78d1a7ec71b4c3f7f9d08ddc0cf864,sentry-trace_id=88eebc46dcea4777b6f82b2df39ea8fd")
+//                        .header("content-type", "application/json")
+//                        .header("origin", "https://ak.hypergryph.com")
+//                        .header("priority", "u=1, i")
+//                        .header("referer", "https://ak.hypergryph.com/user/headhunting")
+//                        .header("sec-ch-ua", "\"Not(A:Brand\";v=\"99\", \"Google Chrome\";v=\"133\", \"Chromium\";v=\"133\"")
+//                        .header("sec-ch-ua-mobile", "?0")
+//                        .header("sec-ch-ua-platform", "\"macOS\"")
+//                        .header("sec-fetch-dest", "empty")
+//                        .header("sec-fetch-mode", "cors")
+//                        .header("sec-fetch-site", "same-origin")
+//                        .header("sentry-trace", "88eebc46dcea4777b6f82b2df39ea8fd-9df2d6946063d859")
+//                        .header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
+//                        .header("cookie", "ak-user-center=nDhVczM4XvenHw3TbAbT98JN38AyTJBWSMCVdFvcyNjj8EVCn5AoT9NgZzqAmIbUFbSvVws3dAW3aKsD5aVpnFu7S6%2BeAY%2FfM%2BvbEzjwF80taTc8mZwBMNd%2BD%2BrUa97qh1w42iWGus%2BXSPFfPkNWAWaIB8BMCcvPWB%2FjQhnG60JpNmfKeVhdM5J8sBblQOdae%2BHnsSh5JusEBAbspLYKprYNLbMeyaFb1%2FXjKo1dUUyxXglPwAz6y0nz9XqOT6u7yUItbrF4zgdvHYj1uiFNOj8RN3GbX7dQHVwQOGe43KhsoQNL4%2B3AScJj8HTA84vFrUUvo6Ej4yXcja9i%2FM66LmQdJ36hsXLt3H3goqRZVSKU1ihaFHqkCXHLUupVkFJxvnrkwhXmBb5%2F3pNskGPLf3jC%2BF3exwIuiOT0sB%2FLEvg%3D")
+                        .build()
+
+                    val resp = client.newCall(request).execute()
+                    val setCookie = resp.headers["Set-Cookie"]
+                    require(setCookie != null)
+                    val map = setCookie.split(";").map { it.trim() }.map { it.substringBefore("=") to it.substringAfter("=") }.toMap()
+                    val akUserCenterCookieContent = map["ak-user-center"]
+                    requireNotNull(akUserCenterCookieContent)
+                    return LoginCookie(akUserCenterCookieContent)
+                }
             }
         }
     }
 
     interface GachaApi {
+        @Serializable
+        data class Pool(
+            val id: String,
+            val name: String,
+        )
+        @Serializable
+        data class PoolListResponse(
+            val code: Int,
+            val msg: String,
+            val data: List<Pool>,
+        )
+        suspend fun poolList(uid: Uid, u8Token: U8Token, loginCookie: LoginCookie): List<Pool> {
+            val resp = fuel.get {
+                url = "https://ak.hypergryph.com/user/api/inquiry/gacha/cate"
+                parameters = listOf("uid" to uid.value.toString())
+                headers = mapOf(
+                    "X-Role-Token" to u8Token.token,
+                    "cookie" to cookie(mapOf(loginCookie.toPair()))
+                )
+            }
+            val body = resp.source.readString()
+            return json.decodeFromString<PoolListResponse>(body).data
+        }
+
         interface GachaInfo {
             val charId: String
             val charName: String
@@ -85,6 +234,19 @@ interface ArkNights {
             fun primeKey(): String {
                 return "${gachaTs}_${pos}"
             }
+            companion object {
+                @Serializable
+                data class DefaultImpl(
+                    override val charId: String,
+                    override val charName: String,
+                    override val gachaTs: String,
+                    override val isNew: Boolean,
+                    override val poolId: String,
+                    override val poolName: String,
+                    override val pos: UInt,
+                    override val rarity: UInt
+                ): GachaInfo
+            }
         }
         interface Gacha : GachaInfo {
             val uid: ULong // 用户id
@@ -92,44 +254,37 @@ interface ArkNights {
                 return "${uid}_${super.primeKey()}"
             }
         }
-
-        suspend fun xRoleToken(
-            token: String,
+        @Serializable
+        data class GachaListData(val list: List<GachaInfo.Companion.DefaultImpl>)
+        @Serializable
+        data class GachaResponse(
+            val code: Int,
+            val msg: String,
+            val data: GachaListData,
         )
-
         suspend fun history(
-            akUserCenterCookieContent: String,
+            loginCookie: LoginCookie,
             u8Token: U8Token,
-            uid: ULong,
+            uid: Uid,
             category: String,
             size: UInt,
             gachaTs: String? = null,
             pos: UInt? = null,
-        ) : List<Gacha>
+        ) : List<GachaInfo>
 
         companion object {
             fun default(): GachaApi {
                 return object : GachaApi {
-                    // 获取token: https://web-api.hypergryph.com/account/info/hg
-                    override suspend fun xRoleToken(token: String) {
-                        fuel.post {
-                            url = "https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid"
-                            body = Json.encodeToString(mapOf(
-                                "token" to token
-                            ))
-                        }
-                        println(token)
-                    }
 
                     override suspend fun history(
-                        akUserCenterCookieContent: String,
+                        loginCookie: LoginCookie,
                         u8Token: U8Token,
-                        uid: ULong,
+                        uid: Uid,
                         category: String,
                         size: UInt,
                         gachaTs: String?,
                         pos: UInt?,
-                    ): List<Gacha> {
+                    ): List<GachaInfo> {
                         val url = "https://ak.hypergryph.com/user/api/inquiry/gacha/history"
                         val resp = fuel.get {
                             this.url = url
@@ -143,16 +298,12 @@ interface ArkNights {
                             }
                             headers = mapOf(
                                 "x-role-token" to u8Token.token,
-                                "cookie" to mapOf(
-                                    "ak-user-center" to akUserCenterCookieContent,
-                                ).map { (k, v) -> "$k=$v" }.joinToString("; ")
+                                "cookie" to cookie(mapOf(loginCookie.toPair()))
                             )
                         }
-
-
-                        println(resp.statusCode)
-                        println(resp.source.readString())
-                        return listOf<Gacha>()
+                        val body = resp.source.readString()
+                        val re = json.decodeFromString<GachaResponse>(body)
+                        return re.data.list
                     }
                 }
             }

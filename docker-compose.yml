@@ -1,0 +1,11 @@
+version: "3"
+
+services:
+  backend: 
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=jdbc:postgresql://10.0.0.42:5432/postgres
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=app

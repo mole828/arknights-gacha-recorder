@@ -1,6 +1,5 @@
 package com.example.api
 
-import com.example.api.ArkNights.Companion.fuel
 import com.example.api.ArkNights.Companion.json
 import com.example.service.GachaRecorder
 import fuel.FuelBuilder

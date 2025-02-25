@@ -3,6 +3,7 @@ package com.example.service
 import com.example.api.ArkNights
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.time.Duration.Companion.minutes
 
@@ -182,7 +183,12 @@ class GachaRecorder(private val database: Database) {
                 val total = hgTokenList.sumOf {
                     delay(1.minutes)
                     try {
-                        updateGacha(it)
+                        newSuspendedTransaction {
+                            updateGacha(it)
+                        }
+                    } catch (e: java.net.SocketTimeoutException) {
+                        // 可能是香港与大陆的问题，尝试一次 忽略
+                        0u
                     } catch (e: Exception) {
                         onError(e)
                         0u

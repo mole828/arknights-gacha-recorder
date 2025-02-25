@@ -4,9 +4,11 @@ import fuel.FuelBuilder
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.cookies.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.http.headers
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.io.readString
 import kotlinx.serialization.Serializable
@@ -42,15 +44,12 @@ interface ArkNights {
     @Serializable
     data class CheckTokenResponse(override val status: Int, override val msg: String, val type: String): BaseResponse
     suspend fun checkToken(hgToken: HgToken): Boolean {
-        val resp = fuel.get {
-            url = "https://as.hypergryph.com/user/info/v1/basic"
-            parameters = listOf(
-                "token" to hgToken.content,
-            )
+        val resp = ktorClient.get("https://as.hypergryph.com/user/info/v1/basic") {
+            parameter("token", hgToken.content)
         }
-        val body = resp.source.readString()
+        val body = resp.bodyAsText()
         val re = json.decodeFromString<CheckTokenResponse>(body)
-        return re.ok()
+        return re.status == 0
     }
 
     @Serializable
@@ -96,12 +95,12 @@ interface ArkNights {
     suspend fun u8TokenByUid(appToken: AppToken, uid: Uid): U8Token
 
     suspend fun info(u8Token: U8Token) {
-        val resp = fuel.get {
-            url = "https://ak.hypergryph.com/user/api/role/info?source_from=&share_type=&share_by="
-            headers = mapOf(
-                "x-role-token" to u8Token.token,
-            )
-        }
+//        val resp = fuel.get {
+//            url = "https://ak.hypergryph.com/user/api/role/info?source_from=&share_type=&share_by="
+//            headers = mapOf(
+//                "x-role-token" to u8Token.token,
+//            )
+//        }
         TODO()
     }
     data class LoginCookie(val akUserCenterCookieContent: String) {
@@ -111,7 +110,7 @@ interface ArkNights {
 
 
     companion object {
-        val fuel = FuelBuilder().build()
+//        val fuel = FuelBuilder().build()
         val ktorClient = io.ktor.client.HttpClient(CIO)
         val json = Json {
             ignoreUnknownKeys = true
@@ -120,41 +119,55 @@ interface ArkNights {
         fun default(): ArkNights {
             return object : ArkNights {
                 override suspend fun grantAppToken(hgToken: HgToken): AppToken {
-                    val resp = fuel.post {
-                        url = "https://as.hypergryph.com/user/oauth2/v2/grant"
-                        headers = mapOf("content-type" to "application/json",)
-                        body = Json.encodeToString(GrantAppTokenPayload(
+                    val resp = ktorClient.post("https://as.hypergryph.com/user/oauth2/v2/grant") {
+                        headers {
+                            append(HttpHeaders.ContentType, ContentType.Application.Json)
+                        }
+                        setBody(json.encodeToString(GrantAppTokenPayload(
                             appCode = "be36d44aa36bfb5b",
                             token = hgToken.content,
                             type = 1,
-                        ))
+                        )))
                     }
-                    val body = resp.source.readString()
-                    return Json.decodeFromString<AppTokenResponse>(body).data
+                    val body = resp.bodyAsText()
+                    return json.decodeFromString<AppTokenResponse>(body).data
                 }
 
                 override suspend fun bindingList(appToken: AppToken): MultiAppBindingList {
-                    val resp = fuel.get {
-                        url = "https://binding-api-account-prod.hypergryph.com/account/binding/v1/binding_list"
-                        parameters = listOf(
-                            "token" to appToken.token,
-                            "appCode" to "arknights",
-                        )
+                    val resp = ktorClient.get("https://binding-api-account-prod.hypergryph.com/account/binding/v1/binding_list") {
+                        parameter("token", appToken.token)
+                        parameter("appCode", "arknights")
                     }
-                    val body = resp.source.readString()
-                    return Json.decodeFromString<BindingListResponse>(body).data
+                    val body = resp.bodyAsText()
+                    return json.decodeFromString<BindingListResponse>(body).data
                 }
                 override suspend fun u8TokenByUid(appToken: AppToken, uid: Uid): U8Token {
-                    val resp = fuel.post {
-                        url = "https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid"
-                        headers = mapOf("content-type" to "application/json")
-                        body = Json.encodeToString(mapOf(
+//                    val resp = fuel.post {
+//                        url = "https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid"
+//                        headers = mapOf("content-type" to "application/json")
+//                        body = Json.encodeToString(mapOf(
+//                            "token" to appToken.token,
+//                            "uid" to uid.value.toString(),
+//                        ))
+//                    }
+//                    val body = resp.source.readString()
+//                    val re = Json.decodeFromString<U8TokenResponse>(body)
+//                    if (re.status != 0) {
+//                        throw IllegalStateException("$re")
+//                    }
+//                    requireNotNull(re.data)
+//                    return re.data
+                    val resp = ktorClient.post("https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid") {
+                        headers {
+                            append(HttpHeaders.ContentType, ContentType.Application.Json)
+                        }
+                        setBody(json.encodeToString(mapOf(
                             "token" to appToken.token,
                             "uid" to uid.value.toString(),
-                        ))
+                        )))
                     }
-                    val body = resp.source.readString()
-                    val re = Json.decodeFromString<U8TokenResponse>(body)
+                    val body = resp.bodyAsText()
+                    val re = json.decodeFromString<U8TokenResponse>(body)
                     if (re.status != 0) {
                         throw IllegalStateException("$re")
                     }
@@ -195,15 +208,14 @@ interface ArkNights {
             val data: List<Pool>,
         )
         suspend fun poolList(uid: Uid, u8Token: U8Token, loginCookie: LoginCookie): List<Pool> {
-            val resp = fuel.get {
-                url = "https://ak.hypergryph.com/user/api/inquiry/gacha/cate"
-                parameters = listOf("uid" to uid.value.toString())
-                headers = mapOf(
-                    "X-Role-Token" to u8Token.token,
-                    "cookie" to cookie(mapOf(loginCookie.toPair()))
-                )
+            val resp = ktorClient.get("https://ak.hypergryph.com/user/api/inquiry/gacha/cate") {
+                parameter("uid", uid.value)
+                headers {
+                    append("X-Role-Token", u8Token.token)
+                    append("cookie", cookie(mapOf(loginCookie.toPair())))
+                }
             }
-            val body = resp.source.readString()
+            val body = resp.bodyAsText()
             return json.decodeFromString<PoolListResponse>(body).data
         }
 
@@ -289,23 +301,18 @@ interface ArkNights {
                         gachaTs: ULong?,
                         pos: UInt?,
                     ): GachaListData {
-                        val url = "https://ak.hypergryph.com/user/api/inquiry/gacha/history"
-                        val resp = fuel.get {
-                            this.url = url
-                            parameters = mutableListOf(
-                                "uid" to uid.toString(),
-                                "category" to pool.id,
-                                "size" to size.toString(),
-                            ).apply {
-                                gachaTs?.let { add("gachaTs" to it.toString()) }
-                                pos?.let { add("pos" to it.toString()) }
+                        val resp = ktorClient.get("https://ak.hypergryph.com/user/api/inquiry/gacha/history") {
+                            parameter("uid", uid)
+                            parameter("category", pool.id)
+                            parameter("size", size)
+                            gachaTs?.let { parameter("gachaTs", it) }
+                            pos?.let { parameter("pos", it) }
+                            headers {
+                                append("x-role-token", u8Token.token)
+                                append("cookie", cookie(mapOf(loginCookie.toPair())))
                             }
-                            headers = mapOf(
-                                "x-role-token" to u8Token.token,
-                                "cookie" to cookie(mapOf(loginCookie.toPair()))
-                            )
                         }
-                        val body = resp.source.readString()
+                        val body = resp.bodyAsText()
                         val re = json.decodeFromString<GachaResponse>(body)
                         return re.data
                     }

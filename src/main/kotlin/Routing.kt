@@ -50,6 +50,9 @@ fun Application.configureRouting() {
     }, onEnd = { result ->
         log.info("end record, total: $result, spent: ${Clock.System.now() - lastBeginTime}")
         delay(2.minutes)
+    }, onError = {
+        log.info("mainLoop 出现错误", it)
+        it.printStackTrace()
     })
     routing {
         get("/healthcheck") {

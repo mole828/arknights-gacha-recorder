@@ -156,6 +156,7 @@ class GachaRecorder(private val database: Database) {
     fun mainLoop(
         onBegin: suspend () -> Unit = {},
         onEnd: suspend (UpdateResult) -> Unit = {},
+        onError: suspend (Exception) -> Unit = {},
     ) {
         GlobalScope.launch {
             while (true) {
@@ -167,9 +168,12 @@ class GachaRecorder(private val database: Database) {
                 }
                 val total = hgTokenList.sumOf {
                     delay(1.minutes)
-                    kotlin.runCatching {
+                    try {
                         update(it)
-                    }.getOrNull() ?: 0u
+                    } catch (e: Exception) {
+                        onError(e)
+                        0u
+                    }
                 }
                 onEnd(UpdateResult(total))
             }

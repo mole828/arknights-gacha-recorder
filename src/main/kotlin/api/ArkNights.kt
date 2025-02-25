@@ -1,6 +1,11 @@
 package com.example.api
 
 import fuel.FuelBuilder
+import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.cookies.*
+import io.ktor.client.request.*
+import io.ktor.http.*
+import io.ktor.http.headers
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.io.readString
@@ -107,9 +112,7 @@ interface ArkNights {
 
     companion object {
         val fuel = FuelBuilder().build()
-        val client = OkHttpClient.Builder().apply {
-            callTimeout(10.seconds)
-        }.build()
+        val ktorClient = io.ktor.client.HttpClient(CIO)
         val json = Json {
             ignoreUnknownKeys = true
         }
@@ -159,26 +162,21 @@ interface ArkNights {
                     return re.data
                 }
 
-                override suspend fun login(u8Token: U8Token): LoginCookie = withContext(Dispatchers.IO) {
-                    val mediaType = "application/json".toMediaType()
-                    val requestBody = json.encodeToString(mapOf(
-                        "token" to u8Token.token,
-                        "source_from" to "",
-                        "share_type" to "",
-                        "share_by" to "",
-                    ))
-                    val request = Request.Builder()
-                        .url("https://ak.hypergryph.com/user/api/role/login")
-                        .post(requestBody.toRequestBody(mediaType))
-                        .build()
-                    client.newCall(request).execute().use { resp ->
-                        val setCookie = resp.headers["Set-Cookie"]
-                        require(setCookie != null)
-                        val map = setCookie.split(";").map { it.trim() }.map { it.substringBefore("=") to it.substringAfter("=") }.toMap()
-                        val akUserCenterCookieContent = map["ak-user-center"]
-                        requireNotNull(akUserCenterCookieContent)
-                        LoginCookie(akUserCenterCookieContent)
+                override suspend fun login(u8Token: U8Token): LoginCookie {
+                    val resp = ktorClient.post("https://ak.hypergryph.com/user/api/role/login") {
+                        headers {
+                            append(HttpHeaders.ContentType, ContentType.Application.Json)
+                        }
+                        setBody(json.encodeToString(mapOf(
+                            "token" to u8Token.token,
+                            "source_from" to "",
+                            "share_type" to "",
+                            "share_by" to "",
+                        )))
                     }
+                    val cookie = resp.setCookie().get(name = "ak-user-center")
+                    requireNotNull(cookie)
+                    return LoginCookie(cookie.value)
                 }
             }
         }

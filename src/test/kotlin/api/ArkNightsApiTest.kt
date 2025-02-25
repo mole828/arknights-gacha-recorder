@@ -1,7 +1,12 @@
 package com.example.api
 
+import com.example.api.ArkNights.Companion.fuel
+import com.example.api.ArkNights.Companion.json
 import com.example.service.GachaRecorder
 import fuel.FuelBuilder
+import io.ktor.client.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
@@ -58,7 +63,7 @@ class ArkNightsApiTest {
     @Test
     fun testService() {
         val db = Database.connect(
-            url="jdbc:postgresql://localhost:5432/app",
+            url = "jdbc:postgresql://localhost:5432/app",
             driver = "org.postgresql.Driver",
             user = "app",
             password = "app",
@@ -68,6 +73,14 @@ class ArkNightsApiTest {
         runBlocking {
             val total = service.updateGacha(hgToken)
             println(total)
+        }
+    }
+
+    @Test
+    fun testLogin() {
+        runBlocking {
+            val c = api.login(u8Token)
+            println(c)
         }
     }
 }

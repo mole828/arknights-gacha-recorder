@@ -1,6 +1,8 @@
 package com.example.api
 
 import fuel.FuelBuilder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.io.readString
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -157,7 +159,7 @@ interface ArkNights {
                     return re.data
                 }
 
-                override suspend fun login(u8Token: U8Token): LoginCookie {
+                override suspend fun login(u8Token: U8Token): LoginCookie = withContext(Dispatchers.IO) {
                     val mediaType = "application/json".toMediaType()
                     val requestBody = json.encodeToString(mapOf(
                         "token" to u8Token.token,
@@ -169,15 +171,14 @@ interface ArkNights {
                         .url("https://ak.hypergryph.com/user/api/role/login")
                         .post(requestBody.toRequestBody(mediaType))
                         .build()
-
-                    val resp = client.newCall(request).execute()
-                    val setCookie = resp.headers["Set-Cookie"]
-                    require(setCookie != null)
-                    val map = setCookie.split(";").map { it.trim() }.map { it.substringBefore("=") to it.substringAfter("=") }.toMap()
-                    val akUserCenterCookieContent = map["ak-user-center"]
-                    requireNotNull(akUserCenterCookieContent)
-                    resp.close()
-                    return LoginCookie(akUserCenterCookieContent)
+                    client.newCall(request).execute().use { resp ->
+                        val setCookie = resp.headers["Set-Cookie"]
+                        require(setCookie != null)
+                        val map = setCookie.split(";").map { it.trim() }.map { it.substringBefore("=") to it.substringAfter("=") }.toMap()
+                        val akUserCenterCookieContent = map["ak-user-center"]
+                        requireNotNull(akUserCenterCookieContent)
+                        LoginCookie(akUserCenterCookieContent)
+                    }
                 }
             }
         }

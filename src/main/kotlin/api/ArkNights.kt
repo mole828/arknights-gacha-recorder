@@ -26,7 +26,7 @@ interface ArkNights {
 
     @JvmInline
     @Serializable
-    value class Uid(val value: ULong)
+    value class Uid(val value: String)
     @Serializable
     data class HgToken (val content: String) {
         // 获取token: https://web-api.hypergryph.com/account/info/hg

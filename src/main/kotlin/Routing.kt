@@ -10,6 +10,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sessions.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -98,7 +99,7 @@ fun Application.configureRouting() {
             val nickName: String,
             val pool: String,
             val ts: ULong,
-            val uid: ULong,
+            val uid: ArkNights.Uid,
         )
         @Serializable
         data class Pagination(
@@ -118,7 +119,7 @@ fun Application.configureRouting() {
         val pageSize = 10
         get("/gachas") {
             val page: Long = call.queryParameters["page"]?.toLong() ?: 0
-            val uid: ULong? = call.queryParameters["uid"]?.toULong()
+            val uid: String? = call.queryParameters["uid"]
             val sql = GachaRecorder.GachaTable.leftJoin(GachaRecorder.UserTable).select(GachaRecorder.GachaTable.columns + listOf(GachaRecorder.UserTable.nickName)).apply {
                 uid?.let { andWhere { GachaRecorder.GachaTable.uid eq uid } }
                 orderBy(GachaRecorder.GachaTable.gachaTs, SortOrder.DESC)
@@ -142,7 +143,7 @@ fun Application.configureRouting() {
                         nickName = row[GachaRecorder.UserTable.nickName],
                         pool = row[GachaRecorder.GachaTable.poolName],
                         ts = row[GachaRecorder.GachaTable.gachaTs] / 1000u,
-                        uid = row[GachaRecorder.GachaTable.uid],
+                        uid = ArkNights.Uid(row[GachaRecorder.GachaTable.uid]),
                     )
                 }
                 GachasResponse(
@@ -165,7 +166,10 @@ fun Application.configureRouting() {
             val appToken = service.arkCenterApi.grantAppToken(hgToken)
             val bindingList = service.arkCenterApi.bindingList(appToken)
             val account = bindingList.list.first().bindingList.first()
-            service.upsert(account, hgToken)
+            launch {
+                service.upsert(account, hgToken)
+                service.update(hgToken)
+            }
             call.respond(mapOf("msg" to "ok", "token" to hgToken.content))
         }
 

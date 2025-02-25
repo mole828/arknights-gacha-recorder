@@ -11,7 +11,7 @@ import kotlin.time.Duration.Companion.seconds
 
 class GachaRecorder(private val database: Database) {
     object UserTable: Table("user") {
-        val uid = ulong("uid")
+        val uid = text("uid")
         override val primaryKey = PrimaryKey(uid)
 
         val nickName = text("nick_name")

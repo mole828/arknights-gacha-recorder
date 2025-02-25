@@ -21,7 +21,7 @@ class GachaRecorder(private val database: Database) {
 
         val channelMasterId = integer("channel_master_id").default(1)
         val channelName = text("channel_name").default("官服")
-        val isDefault = bool("is_default").default(true)
+        val isDefault = bool("is_default").default(false)
         val isDeleted = bool("is_deleted").default(false)
         val isOfficial = bool("is_official").default(true)
     }
@@ -167,7 +167,9 @@ class GachaRecorder(private val database: Database) {
                 }
                 val total = hgTokenList.sumOf {
                     delay(1.minutes)
-                    update(it)
+                    kotlin.runCatching {
+                        update(it)
+                    }.getOrNull() ?: 0u
                 }
                 onEnd(UpdateResult(total))
             }

@@ -15,15 +15,15 @@ class GachaRecorder(private val database: Database) {
         override val primaryKey = PrimaryKey(uid)
 
         val nickName = text("nick_name")
-        val expired = bool("expired")
-        val hgToken = text("hgToken")
+        val hgToken = text("hg_token")
 
-        val channelMasterId = integer("channel_master_id")
-        val channelName = text("channel_name")
-        val isDefault = bool("is_default")
-        val isDeleted = bool("is_deleted")
-        val isOfficial = bool("is_official")
+        val expired = bool("expired").default(false)
 
+        val channelMasterId = integer("channel_master_id").default(1)
+        val channelName = text("channel_name").default("官服")
+        val isDefault = bool("is_default").default(true)
+        val isDeleted = bool("is_deleted").default(false)
+        val isOfficial = bool("is_official").default(true)
     }
 
     object GachaTable: Table("gacha") {

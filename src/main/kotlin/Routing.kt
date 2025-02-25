@@ -84,7 +84,7 @@ fun Application.configureRouting() {
                     isOfficial = it[GachaRecorder.UserTable.isOfficial],
                 ) }
             }
-            call.respond(users)
+            call.respond(users.map { it.nickName })
         }
 
         @Serializable

@@ -10,6 +10,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.sessions.*
 import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
@@ -41,10 +42,12 @@ fun Application.configureRouting() {
         password = dbPassword,
     )
     val service = GachaRecorder(database = db)
+    var lastBeginTime = Clock.System.now()
     service.mainLoop(onBegin = {
         log.info("begin record")
+        lastBeginTime = Clock.System.now()
     }, onEnd = { result ->
-        log.info("end record, total: $result")
+        log.info("end record, total: $result, spent: ${Clock.System.now() - lastBeginTime}")
         delay(2.minutes)
     })
     routing {
@@ -153,7 +156,6 @@ fun Application.configureRouting() {
             call.respondText(Json.encodeToString(resp), ContentType.Application.Json)
         }
 
-
         post("/register") {
             val tokenPerhaps = call.queryParameters["token"]
             log.info("register: $tokenPerhaps")
@@ -166,5 +168,7 @@ fun Application.configureRouting() {
             service.upsert(account, hgToken)
             call.respond(mapOf("msg" to "ok", "token" to hgToken.content))
         }
+
+
     }
 }

@@ -173,6 +173,7 @@ interface ArkNights {
                     val map = setCookie.split(";").map { it.trim() }.map { it.substringBefore("=") to it.substringAfter("=") }.toMap()
                     val akUserCenterCookieContent = map["ak-user-center"]
                     requireNotNull(akUserCenterCookieContent)
+                    resp.close()
                     return LoginCookie(akUserCenterCookieContent)
                 }
             }

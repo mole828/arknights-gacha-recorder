@@ -3,12 +3,9 @@ package com.example
 import com.example.api.ArkNights
 import com.example.service.GachaRecorder
 import io.ktor.http.*
-import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
-import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import io.ktor.server.sessions.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -171,7 +168,8 @@ fun Application.configureRouting() {
             val account = bindingList.list.first().bindingList.first()
             launch {
                 service.upsert(account, hgToken)
-                service.update(hgToken)
+                val total = service.updateGacha(hgToken)
+                log.info("update: $total")
             }
             call.respond(mapOf("msg" to "ok", "token" to hgToken.content))
         }

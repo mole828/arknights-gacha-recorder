@@ -3,10 +3,8 @@ package com.example.service
 import com.example.api.ArkNights
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 
 class GachaRecorder(private val database: Database) {
     object UserTable: Table("user") {
@@ -104,9 +102,7 @@ class GachaRecorder(private val database: Database) {
     fun exists(uid: ArkNights.Uid, gachaTs: ULong, pos: UInt): Boolean {
         return transaction(database) {
             GachaTable.select(GachaTable.uid).where {
-                GachaTable.uid eq uid.value
-                GachaTable.gachaTs eq gachaTs
-                GachaTable.pos eq pos
+                (GachaTable.uid eq uid.value).and(GachaTable.gachaTs eq gachaTs).and(GachaTable.pos eq pos)
             }.count() > 0
         }
     }
@@ -135,7 +131,7 @@ class GachaRecorder(private val database: Database) {
 
     val arkCenterApi = ArkNights.default()
     val gachaApi = ArkNights.GachaApi.default()
-    suspend fun update(hgToken: ArkNights.HgToken, size: UInt = 10u) : UInt {
+    suspend fun updateGacha(hgToken: ArkNights.HgToken, size: UInt = 10u) : UInt {
         require(arkCenterApi.checkToken(hgToken)) {
             expire(hgToken)
             "hgToken 无效"
@@ -167,13 +163,15 @@ class GachaRecorder(private val database: Database) {
         return total
     }
 
+    val scope = CoroutineScope(Dispatchers.Default)
+
     data class UpdateResult(var sum: UInt)
     fun mainLoop(
         onBegin: suspend () -> Unit = {},
         onEnd: suspend (UpdateResult) -> Unit = {},
         onError: suspend (Exception) -> Unit = {},
     ) {
-        GlobalScope.launch {
+        scope.launch {
             while (true) {
                 onBegin()
                 val hgTokenList = transaction (database) {
@@ -184,7 +182,7 @@ class GachaRecorder(private val database: Database) {
                 val total = hgTokenList.sumOf {
                     delay(1.minutes)
                     try {
-                        update(it)
+                        updateGacha(it)
                     } catch (e: Exception) {
                         onError(e)
                         0u
@@ -193,5 +191,9 @@ class GachaRecorder(private val database: Database) {
                 onEnd(UpdateResult(total))
             }
         }
+    }
+
+    fun cancel() {
+        scope
     }
 }

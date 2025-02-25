@@ -1,10 +1,8 @@
 package com.example.api
 
-import com.example.api.ArkNights.Companion
 import com.example.service.GachaRecorder
 import fuel.FuelBuilder
 import kotlinx.coroutines.runBlocking
-import kotlinx.io.readString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import java.io.File
@@ -68,7 +66,8 @@ class ArkNightsApiTest {
         val service = GachaRecorder(db)
         service.upsert(accountInfo = bindingList.list.first().bindingList.first(), hgToken = hgToken)
         runBlocking {
-            service.update(hgToken)
+            val total = service.updateGacha(hgToken)
+            println(total)
         }
     }
 }

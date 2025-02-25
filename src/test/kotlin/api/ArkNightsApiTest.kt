@@ -66,6 +66,7 @@ class ArkNightsApiTest {
             password = "app",
         )
         val service = GachaRecorder(db)
+        service.upsert(accountInfo = bindingList.list.first().bindingList.first(), hgToken = hgToken)
         runBlocking {
             service.update(hgToken)
         }

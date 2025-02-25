@@ -1,10 +1,9 @@
 package com.example.service
 
 import com.example.api.ArkNights
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
@@ -53,9 +52,25 @@ class GachaRecorder(private val database: Database) {
                 where = { UserTable.uid eq accountInfo.uid.value },
                 body = { row ->
                     row[UserTable.uid] = accountInfo.uid.value
+                    row[UserTable.hgToken] = hgToken.content
+
                     row[UserTable.nickName] = accountInfo.nickName
                     row[UserTable.expired] = false
-                    row[UserTable.hgToken] = hgToken.content
+                    row[UserTable.channelMasterId] = accountInfo.channelMasterId
+                    row[UserTable.channelName] = accountInfo.channelName
+                    row[UserTable.isDefault] = accountInfo.isDefault
+                    row[UserTable.isDeleted] = accountInfo.isDeleted
+                    row[UserTable.isOfficial] = accountInfo.isOfficial
+                }
+            )
+        }
+    }
+    fun update(accountInfo: ArkNights.AccountInfo) {
+        transaction (database) {
+            UserTable.update(
+                where = { UserTable.uid eq accountInfo.uid.value },
+                body = { row ->
+                    row[UserTable.nickName] = accountInfo.nickName
                     row[UserTable.channelMasterId] = accountInfo.channelMasterId
                     row[UserTable.channelName] = accountInfo.channelName
                     row[UserTable.isDefault] = accountInfo.isDefault
@@ -132,7 +147,7 @@ class GachaRecorder(private val database: Database) {
             "这是什么? $appBindings"
         }
         val account = appBindings.bindingList.first()
-        upsert(account, hgToken)
+        update(account)
         val uid = account.uid
         val u8Token = arkCenterApi.u8TokenByUid(appToken, uid)
         val loginCookie = arkCenterApi.login(u8Token)

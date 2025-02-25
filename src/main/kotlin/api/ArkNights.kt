@@ -8,6 +8,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import kotlin.time.Duration.Companion.seconds
 
 interface ArkNights {
     interface BaseResponse {
@@ -104,7 +105,9 @@ interface ArkNights {
 
     companion object {
         val fuel = FuelBuilder().build()
-        val client = OkHttpClient()
+        val client = OkHttpClient.Builder().apply {
+            callTimeout(10.seconds)
+        }.build()
         val json = Json {
             ignoreUnknownKeys = true
         }

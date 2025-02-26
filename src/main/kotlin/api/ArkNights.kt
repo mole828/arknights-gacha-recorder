@@ -129,6 +129,9 @@ interface ArkNights {
 
                 override suspend fun bindingList(appToken: AppToken): MultiAppBindingList {
                     val resp = ktorClient.get("https://binding-api-account-prod.hypergryph.com/account/binding/v1/binding_list") {
+                        headers {
+                            append(HttpHeaders.ContentType, ContentType.Application.Json)
+                        }
                         parameter("token", appToken.token)
                         parameter("appCode", "arknights")
                     }

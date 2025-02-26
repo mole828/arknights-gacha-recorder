@@ -4,12 +4,14 @@ import com.example.api.ArkNights
 import com.example.service.GachaRecorder
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SortOrder
@@ -19,6 +21,16 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import kotlin.time.Duration.Companion.minutes
 
 fun Application.configureRouting() {
+    @Serializable
+    class ResponseTemplate (
+        val code: Int,
+        val msg: String,
+    )
+    install(StatusPages) {
+        exception<IllegalArgumentException> { call: ApplicationCall, cause ->
+            call.respond(HttpStatusCode.BadRequest, ResponseTemplate(code = -1, msg = cause.message?: "parameter does not match"))
+        }
+    }
 
     val dbUrl = System.getenv()["DATABASE_URL"]
     requireNotNull(dbUrl) {
@@ -161,8 +173,19 @@ fun Application.configureRouting() {
             val tokenPerhaps = call.queryParameters["token"]
             log.info("register: $tokenPerhaps")
             requireNotNull(tokenPerhaps) { "token is required" }
-            val hgToken = ArkNights.HgToken(tokenPerhaps)
-            require(service.arkCenterApi.checkToken(hgToken))
+            val hgToken = run {
+                val hgToken = ArkNights.HgToken(tokenPerhaps)
+                if (service.arkCenterApi.checkToken(hgToken)) {
+                    return@run hgToken
+                }
+                val hgTokenResponse = kotlin.runCatching {
+                    Json.decodeFromString<ArkNights.HgTokenResponse>(tokenPerhaps)
+                } .getOrNull() ?: throw IllegalArgumentException("token is invalid")
+                require(service.arkCenterApi.checkToken(hgTokenResponse.data)) { "token is invalid" }
+                return@run hgTokenResponse.data
+            }
+//            val hgToken = ArkNights.HgToken(tokenPerhaps)
+//            require(service.arkCenterApi.checkToken(hgToken))
             val appToken = service.arkCenterApi.grantAppToken(hgToken)
             val bindingList = service.arkCenterApi.bindingList(appToken)
             val account = bindingList.list.first().bindingList.first()

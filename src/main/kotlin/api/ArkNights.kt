@@ -6,18 +6,9 @@ import io.ktor.client.plugins.cookies.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import io.ktor.http.headers
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
-import kotlinx.io.readString
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import kotlin.time.Duration.Companion.seconds
 
 interface ArkNights {
     interface BaseResponse {
@@ -46,6 +37,9 @@ interface ArkNights {
     suspend fun checkToken(hgToken: HgToken): Boolean {
         val resp = ktorClient.get("https://as.hypergryph.com/user/info/v1/basic") {
             parameter("token", hgToken.content)
+        }
+        if (resp.status != HttpStatusCode.OK) {
+            return false
         }
         val body = resp.bodyAsText()
         val re = json.decodeFromString<CheckTokenResponse>(body)

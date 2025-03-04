@@ -62,6 +62,8 @@ fun Application.configureRouting() {
     }, onError = {
         log.info("mainLoop 出现错误", it)
         it.printStackTrace()
+    }, onUserDone = {
+        log.info("更新用户数据, nickName: ${it.nickName}, total: ${it.total}")
     })
     routing {
         get("/healthcheck") {

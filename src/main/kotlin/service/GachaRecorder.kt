@@ -167,25 +167,33 @@ class GachaRecorder(private val database: Database) {
     val scope = CoroutineScope(Dispatchers.Default)
 
     data class UpdateResult(var sum: UInt)
+    data class UserUpdateResult(val nickName: String, var total: UInt)
     fun mainLoop(
         onBegin: suspend () -> Unit = {},
         onEnd: suspend (UpdateResult) -> Unit = {},
         onError: suspend (Exception) -> Unit = {},
+        onUserDone: suspend (UserUpdateResult) -> Unit = {},
     ) {
         scope.launch {
             while (true) {
                 onBegin()
-                val hgTokenList = transaction (database) {
-                    UserTable.select(UserTable.hgToken).where {
+
+                val hgTokenMap = transaction (database) {
+                    UserTable.select(UserTable.hgToken, UserTable.nickName).where {
                         UserTable.expired eq false
-                    }.map { ArkNights.HgToken(content = it[UserTable.hgToken]) }
+                    }.map {
+                        ArkNights.HgToken(content = it[UserTable.hgToken]) to it[UserTable.nickName]
+                    }
                 }
-                val total = hgTokenList.sumOf {
+                val total = hgTokenMap.sumOf {
+                    val (hgToken, nickName) = it
                     delay(1.minutes)
                     try {
-                        newSuspendedTransaction {
-                            updateGacha(it)
-                        }
+                        val userUpdateResult = UserUpdateResult(total = newSuspendedTransaction {
+                            updateGacha(hgToken)
+                        }, nickName = nickName)
+                        onUserDone(userUpdateResult)
+                        userUpdateResult.total
                     } catch (e: java.net.SocketTimeoutException) {
                         // 可能是香港与大陆的问题，尝试一次 忽略
                         0u

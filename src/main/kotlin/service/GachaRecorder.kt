@@ -164,7 +164,13 @@ class GachaRecorder(private val database: Database) {
         return total
     }
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(
+        Dispatchers.IO + SupervisorJob() +
+        CoroutineExceptionHandler { coroutineContext, throwable ->
+            println("CoroutineExceptionHandler 捕获异常: $throwable")
+            throwable.printStackTrace()
+        }
+    )
 
     data class UpdateResult(var sum: UInt)
     data class UserUpdateResult(val nickName: String, var total: UInt)

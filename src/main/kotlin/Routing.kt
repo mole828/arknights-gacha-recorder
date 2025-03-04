@@ -54,10 +54,10 @@ fun Application.configureRouting() {
     val service = GachaRecorder(database = db)
     var lastBeginTime = Clock.System.now()
     service.mainLoop(onBegin = {
-        log.info("begin record")
+        log.info("begin record round")
         lastBeginTime = Clock.System.now()
     }, onEnd = { result ->
-        log.info("end record, total: $result, spent: ${Clock.System.now() - lastBeginTime}")
+        log.info("end record round, total: $result, spent: ${Clock.System.now() - lastBeginTime}")
         delay(2.minutes)
     }, onError = {
         log.info("mainLoop 出现错误", it)
@@ -66,8 +66,16 @@ fun Application.configureRouting() {
         log.info("更新用户数据, nickName: ${it.nickName}, total: ${it.total}")
     })
     routing {
+        @Serializable
+        data class HealthCheckStruct(
+            val msg: String,
+            val mainLoopRunning: Map<String, Boolean>,
+        )
         get("/healthcheck") {
-            call.respondText("ok")
+            call.respondText(Json.encodeToString(HealthCheckStruct(
+                msg = "ok",
+                mainLoopRunning = service.mainLoopRunning(),
+            )), ContentType.Application.Json)
         }
 
         get("/users") {

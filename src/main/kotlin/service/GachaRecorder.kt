@@ -164,7 +164,7 @@ class GachaRecorder(private val database: Database) {
         return total
     }
 
-    val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(Dispatchers.Default)
 
     data class UpdateResult(var sum: UInt)
     data class UserUpdateResult(val nickName: String, var total: UInt)
@@ -204,6 +204,13 @@ class GachaRecorder(private val database: Database) {
                 }
                 onEnd(UpdateResult(total))
             }
+        }
+    }
+    fun mainLoopRunning() = run {
+        val job = scope.coroutineContext[Job]
+        requireNotNull(job)
+        job.children.toList().associate {
+            it.key.toString() to it.isActive
         }
     }
 

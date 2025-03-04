@@ -171,7 +171,7 @@ class GachaRecorder(private val database: Database) {
     fun mainLoop(
         onBegin: suspend () -> Unit = {},
         onEnd: suspend (UpdateResult) -> Unit = {},
-        onError: suspend (Exception) -> Unit = {},
+        onError: suspend (Throwable) -> Unit = {},
         onUserDone: suspend (UserUpdateResult) -> Unit = {},
     ) {
         scope.launch {
@@ -184,7 +184,7 @@ class GachaRecorder(private val database: Database) {
                     }.map {
                         ArkNights.HgToken(content = it[UserTable.hgToken]) to it[UserTable.nickName]
                     }
-                }
+                }.shuffled()
                 val total = hgTokenMap.sumOf {
                     val (hgToken, nickName) = it
                     delay(1.minutes)
@@ -194,10 +194,10 @@ class GachaRecorder(private val database: Database) {
                         }, nickName = nickName)
                         onUserDone(userUpdateResult)
                         userUpdateResult.total
-                    } catch (e: java.net.SocketTimeoutException) {
+                    } catch (e: io.ktor.client.network.sockets.ConnectTimeoutException) {
                         // 可能是香港与大陆的问题，尝试一次 忽略
                         0u
-                    } catch (e: Exception) {
+                    } catch (e: Throwable) {
                         onError(e)
                         0u
                     }

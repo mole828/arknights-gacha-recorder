@@ -195,7 +195,7 @@ class GachaRecorder(private val database: Database) {
                     val (hgToken, nickName) = it
                     delay(1.minutes)
                     try {
-                        val userUpdateResult = UserUpdateResult(total = newSuspendedTransaction {
+                        val userUpdateResult = UserUpdateResult(total = newSuspendedTransaction (coroutineContext) {
                             updateGacha(hgToken)
                         }, nickName = nickName)
                         onUserDone(userUpdateResult)

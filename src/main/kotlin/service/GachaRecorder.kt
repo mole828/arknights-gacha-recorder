@@ -149,19 +149,23 @@ class GachaRecorder(private val database: Database) {
         val u8Token = arkCenterApi.u8TokenByUid(appToken, uid)
         val loginCookie = arkCenterApi.login(u8Token)
         val poolList = gachaApi.poolList(uid, u8Token, loginCookie)
-        var total = 0u
-        poolList.forEach { pool ->
+        val waitInsert = mutableListOf<ArkNights.GachaApi.Gacha>()
+        poolList.map { pool ->
+            var lastSize = waitInsert.size - 1
             var history = gachaApi.history(loginCookie, u8Token, uid, pool, size = size)
-            var thisBatch = 1u
-            while (thisBatch > 0u) {
-                thisBatch = record(history.list.map { ArkNights.GachaApi.Gacha.from(uid, it) })
-                total += thisBatch
+            while (waitInsert.size > lastSize) {
+                lastSize = waitInsert.size
+                val thisBatch = history.list.filter { exists(uid, it.gachaTs, it.pos) }.map { ArkNights.GachaApi.Gacha.from(uid, it) }
+                waitInsert.addAll(thisBatch)
+
                 if(!history.hasMore) break
                 val last = history.list.last()
                 history = gachaApi.history(loginCookie, u8Token, uid, pool, size = size, gachaTs = last.gachaTs, pos = last.pos)
             }
         }
-        return total
+        return transaction {
+            record(waitInsert)
+        }
     }
 
     private val scope = CoroutineScope(
@@ -195,9 +199,7 @@ class GachaRecorder(private val database: Database) {
                     val (hgToken, nickName) = it
                     delay(1.minutes)
                     try {
-                        val userUpdateResult = UserUpdateResult(total = newSuspendedTransaction (coroutineContext) {
-                            updateGacha(hgToken)
-                        }, nickName = nickName)
+                        val userUpdateResult = UserUpdateResult(total = updateGacha(hgToken), nickName = nickName)
                         onUserDone(userUpdateResult)
                         userUpdateResult.total
                     } catch (e: io.ktor.client.network.sockets.ConnectTimeoutException) {

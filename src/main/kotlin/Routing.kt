@@ -62,8 +62,11 @@ fun Application.configureRouting() {
     }, onError = {
         log.info("mainLoop 出现错误", it)
         it.printStackTrace()
-    }, onUserDone = {
-        log.info("更新用户数据, nickName: ${it.nickName}, total: ${it.total}")
+    }, onUser = { ctx, nextFunc ->
+        log.info("开始抓取用户数据, nickName: ${ctx.nickName}")
+        val total = nextFunc(ctx)
+        log.info("更新用户数据, nickName: ${ctx.nickName}, total: $total")
+        total
     })
     routing {
         @Serializable

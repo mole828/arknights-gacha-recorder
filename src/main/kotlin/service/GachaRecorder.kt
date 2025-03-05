@@ -178,11 +178,15 @@ class GachaRecorder(private val database: Database) {
 
     data class UpdateResult(var sum: UInt)
     data class UserUpdateResult(val nickName: String, var total: UInt)
+    data class OnUserContext(
+        val nickName: String,
+        val hgToken: ArkNights.HgToken,
+    )
     fun mainLoop(
         onBegin: suspend () -> Unit = {},
         onEnd: suspend (UpdateResult) -> Unit = {},
         onError: suspend (Throwable) -> Unit = {},
-        onUserDone: suspend (UserUpdateResult) -> Unit = {},
+        onUser: suspend ( ctx: OnUserContext, nextFunc: suspend (OnUserContext)->UInt ) -> UInt = { ctx, nextFunc -> nextFunc(ctx) },
     ) {
         scope.launch {
             while (true) {
@@ -196,19 +200,20 @@ class GachaRecorder(private val database: Database) {
                     }
                 }.shuffled()
                 val total = hgTokenMap.sumOf {
-                    val (hgToken, nickName) = it
-                    delay(1.minutes)
-                    try {
-                        val userUpdateResult = UserUpdateResult(total = updateGacha(hgToken), nickName = nickName)
-                        onUserDone(userUpdateResult)
-                        userUpdateResult.total
-                    } catch (e: io.ktor.client.network.sockets.ConnectTimeoutException) {
-                        // 可能是香港与大陆的问题，尝试一次 忽略
-                        0u
-                    } catch (e: Throwable) {
-                        onError(e)
-                        0u
+                    val nextFunc: suspend (OnUserContext) -> UInt = { ctx ->
+                        delay(1.minutes)
+                        try {
+                            updateGacha(ctx.hgToken)
+                        } catch (e: io.ktor.client.network.sockets.ConnectTimeoutException) {
+                            // 可能是香港与大陆的问题，尝试一次 忽略
+                            0u
+                        } catch (e: Throwable) {
+                            onError(e)
+                            0u
+                        }
                     }
+                    val (hgToken, nickName) = it
+                    onUser(OnUserContext(nickName, hgToken), nextFunc)
                 }
                 onEnd(UpdateResult(total))
             }

@@ -4,10 +4,12 @@ import kotlin.test.Test
 import io.ktor.client.network.sockets.*
 import org.jetbrains.exposed.sql.transactions.experimental.*
 import kotlinx.coroutines.*
+import org.jetbrains.exposed.sql.Database
 
 class SuspendTest {
     @Test
     fun test() {
+        Database.connect(url = "jdbc:postgresql://localhost:5432/app", driver = "org.postgresql.Driver", user = "app", password = "app")
         // 模拟存在网络请求的数据库操作
         suspend fun fakeUpdateGacha() {
             delay(100)
@@ -17,16 +19,26 @@ class SuspendTest {
         suspend fun main() = coroutineScope {
             val handler = CoroutineExceptionHandler { _, e ->
                 println("全局捕获: ${e.javaClass.simpleName}")
+                e.printStackTrace()
             }
             val scope = CoroutineScope(SupervisorJob() + handler)
 
             scope.launch {
-                try {
-//                    newSuspendedTransaction (coroutineContext) { // 重点观察此处
-                        fakeUpdateGacha() // 模拟你的updateGacha
-//                    }
-                } catch (e: ConnectTimeoutException) {
-                    println("内部捕获成功")
+                supervisorScope {
+
+                    try {
+                        newSuspendedTransaction () { // 重点观察此处
+//                            try {
+                                fakeUpdateGacha() // 模拟你的updateGacha
+//                            }catch (e: Throwable) {
+//                                println("内部捕获成功")
+//                                throw e
+//                            }
+                        }
+                    } catch (e: Throwable) {
+                        println("内部捕获成功")
+                        throw e
+                    }
                 }
             }
 

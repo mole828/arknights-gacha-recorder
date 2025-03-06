@@ -61,7 +61,6 @@ fun Application.configureRouting() {
         delay(2.minutes)
     }, onError = {
         log.info("mainLoop 出现错误", it)
-        it.printStackTrace()
     }, onUser = { ctx, nextFunc ->
         log.info("开始抓取用户数据, nickName: ${ctx.nickName}")
         val total = nextFunc(ctx)

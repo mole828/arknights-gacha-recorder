@@ -204,9 +204,6 @@ class GachaRecorder(private val database: Database) {
                         delay(1.minutes)
                         try {
                             updateGacha(ctx.hgToken)
-                        } catch (e: io.ktor.client.network.sockets.ConnectTimeoutException) {
-                            // 可能是香港与大陆的问题，尝试一次 忽略
-                            0u
                         } catch (e: Throwable) {
                             onError(e)
                             0u

@@ -16,9 +16,10 @@ import kotlin.test.Test
 class ArkNightsApiTest {
     val api = ArkNights.default()
     val gachaApi = ArkNights.GachaApi.default()
-    val hgToken = File("src/main/resources/token.test.json").readText().let {
-        Json.decodeFromString<ArkNights.HgTokenResponse>(it).data
-    }
+//    val hgToken = File("src/main/resources/token.test.json").readText().let {
+//        Json.decodeFromString<ArkNights.HgTokenResponse>(it).data
+//    }
+    val hgToken = ArkNights.HgToken("KBOTRkngWzyyukYBC+rsvCrm")
     val appToken = runBlocking { api.grantAppToken(hgToken) }
     val bindingList = runBlocking { api.bindingList(appToken) }
     val uid = bindingList.list.first().bindingList.first().uid

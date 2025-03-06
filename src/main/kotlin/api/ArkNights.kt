@@ -2,13 +2,16 @@ package com.example.api
 
 import fuel.FuelBuilder
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.plugins.cookies.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.seconds
 
 interface ArkNights {
     interface BaseResponse {
@@ -104,8 +107,13 @@ interface ArkNights {
 
 
     companion object {
-//        val fuel = FuelBuilder().build()
-        val ktorClient = io.ktor.client.HttpClient(CIO)
+        val ktorClient = io.ktor.client.HttpClient(CIO) {
+            install(HttpTimeout) {
+                connectTimeoutMillis = 5.seconds.inWholeMilliseconds
+                requestTimeoutMillis = 10.seconds.inWholeMilliseconds
+                socketTimeoutMillis = 5.seconds.inWholeMilliseconds
+            }
+        }
         val json = Json {
             ignoreUnknownKeys = true
         }

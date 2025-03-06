@@ -3,8 +3,8 @@ package com.example.service
 import com.example.api.ArkNights
 import kotlinx.coroutines.*
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.transactions.transaction
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
 class GachaRecorder(private val database: Database) {
@@ -187,6 +187,7 @@ class GachaRecorder(private val database: Database) {
         onEnd: suspend (UpdateResult) -> Unit = {},
         onError: suspend (Throwable) -> Unit = {},
         onUser: suspend ( ctx: OnUserContext, nextFunc: suspend (OnUserContext)->UInt ) -> UInt = { ctx, nextFunc -> nextFunc(ctx) },
+        delayTime: suspend () -> Duration = { 2.minutes }
     ) {
         scope.launch {
             while (true) {
@@ -201,7 +202,6 @@ class GachaRecorder(private val database: Database) {
                 }.shuffled()
                 val total = hgTokenMap.sumOf {
                     val nextFunc: suspend (OnUserContext) -> UInt = { ctx ->
-                        delay(1.minutes)
                         try {
                             updateGacha(ctx.hgToken)
                         } catch (e: Throwable) {
@@ -210,7 +210,9 @@ class GachaRecorder(private val database: Database) {
                         }
                     }
                     val (hgToken, nickName) = it
-                    onUser(OnUserContext(nickName, hgToken), nextFunc)
+                    val result = onUser(OnUserContext(nickName, hgToken), nextFunc)
+                    delay(delayTime())
+                    result
                 }
                 onEnd(UpdateResult(total))
             }

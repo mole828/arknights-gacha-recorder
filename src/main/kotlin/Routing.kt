@@ -52,9 +52,14 @@ fun Application.configureRouting() {
         password = dbPassword,
     )
     val service = GachaRecorder(database = db)
-    monitor.subscribe(ServerReady) {
-        service.scope.launch {
-            service.mainLoop()
+
+    val openLoop = System.getenv()["OPEN_LOOP"]?.toBoolean() ?: false
+    log.info("OPEN_LOOP: $openLoop")
+    if (openLoop) {
+        monitor.subscribe(ServerReady) {
+            service.scope.launch {
+                service.mainLoop()
+            }
         }
     }
     routing {

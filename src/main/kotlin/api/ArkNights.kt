@@ -11,9 +11,12 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.seconds
 
 interface ArkNights {
+    val logger: org.slf4j.Logger get() = LoggerFactory.getLogger(javaClass)
+
     interface BaseResponse {
         val status: Int
         val msg: String
@@ -42,9 +45,10 @@ interface ArkNights {
             parameter("token", hgToken.content)
         }
         if (resp.status != HttpStatusCode.OK) {
-            return false
+            throw IllegalStateException("checkToken 失败, status: ${resp.status}")
         }
         val body = resp.bodyAsText()
+        logger.debug("checkToken 成功, body: $body")
         val re = json.decodeFromString<CheckTokenResponse>(body)
         return re.status == 0
     }

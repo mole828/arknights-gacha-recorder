@@ -2,13 +2,24 @@ package com.example.service
 
 import com.example.api.ArkNights
 import kotlinx.coroutines.*
+import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import kotlin.math.log
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class GachaRecorder(private val database: Database) {
-    object UserTable: Table("user") {
+    public var logger: Logger
+
+    init {
+        logger = LoggerFactory.getLogger(javaClass)
+    }
+
+    object UserTable : Table("user") {
         val uid = text("uid")
         override val primaryKey = PrimaryKey(uid)
 
@@ -24,7 +35,7 @@ class GachaRecorder(private val database: Database) {
         val isOfficial = bool("is_official").default(true)
     }
 
-    object GachaTable: Table("gacha") {
+    object GachaTable : Table("gacha") {
         val uid = reference("uid", UserTable.uid)
         val gachaTs = ulong("gacha_ts")
         val pos = uinteger("pos")
@@ -47,7 +58,7 @@ class GachaRecorder(private val database: Database) {
 
     fun upsert(accountInfo: ArkNights.AccountInfo, hgToken: ArkNights.HgToken) {
         transaction(database) {
-            UserTable.upsert (
+            UserTable.upsert(
                 where = { UserTable.uid eq accountInfo.uid.value },
                 body = { row ->
                     row[UserTable.uid] = accountInfo.uid.value
@@ -64,8 +75,9 @@ class GachaRecorder(private val database: Database) {
             )
         }
     }
+
     fun update(accountInfo: ArkNights.AccountInfo) {
-        transaction (database) {
+        transaction(database) {
             UserTable.update(
                 where = { UserTable.uid eq accountInfo.uid.value },
                 body = { row ->
@@ -79,6 +91,7 @@ class GachaRecorder(private val database: Database) {
             )
         }
     }
+
     private fun expire(uid: ArkNights.Uid) {
         transaction(database) {
             UserTable.update(
@@ -89,6 +102,7 @@ class GachaRecorder(private val database: Database) {
             )
         }
     }
+
     private fun expire(hgToken: ArkNights.HgToken) {
         transaction(database) {
             UserTable.update(
@@ -110,7 +124,7 @@ class GachaRecorder(private val database: Database) {
 
     fun record(gacha: ArkNights.GachaApi.Gacha): UInt {
         return transaction(database) {
-            if( exists(gacha.uid, gacha.gachaTs, gacha.pos) ) {
+            if (exists(gacha.uid, gacha.gachaTs, gacha.pos)) {
                 return@transaction 0u
             }
             GachaTable.insert {
@@ -128,52 +142,92 @@ class GachaRecorder(private val database: Database) {
             1u
         }
     }
+
     fun record(list: List<ArkNights.GachaApi.Gacha>): UInt = list.sumOf { record(it) }
 
     val arkCenterApi = ArkNights.default()
     val gachaApi = ArkNights.GachaApi.default()
-    suspend fun updateGacha(hgToken: ArkNights.HgToken, size: UInt = 10u) : UInt {
-        require(arkCenterApi.checkToken(hgToken)) {
-            expire(hgToken)
-            "hgToken 无效"
-        }
-        val appToken = arkCenterApi.grantAppToken(hgToken)
-        val bindingList= arkCenterApi.bindingList(appToken = appToken)
-        val appBindings = bindingList.list.first()
-        require(appBindings.appCode == "arknights") {
-            "这是什么? $appBindings"
-        }
-        val account = appBindings.bindingList.first()
-        update(account)
-        val uid = account.uid
-        val u8Token = arkCenterApi.u8TokenByUid(appToken, uid)
-        val loginCookie = arkCenterApi.login(u8Token)
-        val poolList = gachaApi.poolList(uid, u8Token, loginCookie)
-        val waitInsert = mutableListOf<ArkNights.GachaApi.Gacha>()
-        poolList.map { pool ->
-            var lastSize = waitInsert.size - 1
-            var history = gachaApi.history(loginCookie, u8Token, uid, pool, size = size)
-            while (waitInsert.size > lastSize) {
-                lastSize = waitInsert.size
-                val thisBatch = history.list.filter { exists(uid, it.gachaTs, it.pos) }.map { ArkNights.GachaApi.Gacha.from(uid, it) }
-                waitInsert.addAll(thisBatch)
 
-                if(!history.hasMore) break
-                val last = history.list.last()
-                history = gachaApi.history(loginCookie, u8Token, uid, pool, size = size, gachaTs = last.gachaTs, pos = last.pos)
+    inner class UserUpdateTask(
+        val hgToken: ArkNights.HgToken,
+    ) {
+        var uid: ArkNights.Uid private set
+        var nickName: String private set
+        var u8Token: ArkNights.U8Token private set
+        var loginCookie: ArkNights.LoginCookie private set
+        var poolList: List<ArkNights.GachaApi.Pool> private set
+        init {
+            runBlocking {
+                logger.debug("检查 hgToken 是否有效")
+                require(arkCenterApi.checkToken(hgToken)) {
+                    expire(hgToken)
+                    "hgToken 无效"
+                }
+                logger.debug("生成 appToken")
+                val appToken = arkCenterApi.grantAppToken(hgToken)
+                logger.debug("获取绑定列表")
+                val bindingList = arkCenterApi.bindingList(appToken = appToken)
+                val appBindings = bindingList.list.first()
+                require(appBindings.appCode == "arknights") {
+                    "这是什么? $appBindings"
+                }
+                nickName = appBindings.bindingList.first().nickName
+                val account = appBindings.bindingList.first()
+                update(account)
+                uid = account.uid
+                logger.debug("$nickName 获取 u8Token")
+                u8Token = arkCenterApi.u8TokenByUid(appToken, uid)
+                logger.debug("$nickName 登录")
+                loginCookie = arkCenterApi.login(u8Token)
+                logger.debug("$nickName 获取卡池列表")
+                poolList = gachaApi.poolList(uid, u8Token, loginCookie)
             }
         }
-        return transaction {
-            record(waitInsert)
+        suspend fun run(size: UInt = 10u): UInt {
+            val waitInsert = mutableListOf<ArkNights.GachaApi.Gacha>()
+            poolList.map { pool ->
+                // 卡池名称中有换行符
+                val poolName = pool.name.replace("\n", "-")
+                var lastSize = waitInsert.size - 1
+                logger.debug("$nickName 获取 $poolName 历史记录")
+                var history = gachaApi.history(loginCookie, u8Token, uid, pool, size = size)
+                while (waitInsert.size > lastSize) {
+                    delay(5.seconds)
+                    lastSize = waitInsert.size
+                    val thisBatch = history.list.filter { exists(uid, it.gachaTs, it.pos) }
+                        .map { ArkNights.GachaApi.Gacha.from(uid, it) }
+                    waitInsert.addAll(thisBatch)
+
+                    if (!history.hasMore) break
+                    val last = history.list.last()
+                    logger.debug("$nickName 获取 $poolName 历史记录, 已处理 ${history.list.size} 条记录")
+                    history = gachaApi.history(
+                        loginCookie,
+                        u8Token,
+                        uid,
+                        pool,
+                        size = size,
+                        gachaTs = last.gachaTs,
+                        pos = last.pos
+                    )
+                }
+            }
+            return transaction {
+                record(waitInsert)
+            }
         }
     }
 
-    private val scope = CoroutineScope(
-        Dispatchers.IO + SupervisorJob() +
-        CoroutineExceptionHandler { coroutineContext, throwable ->
-            println("CoroutineExceptionHandler 捕获异常: $throwable")
-            throwable.printStackTrace()
-        }
+    suspend fun updateGacha(hgToken: ArkNights.HgToken, size: UInt = 10u): UInt {
+        return UserUpdateTask(hgToken).run(size)
+    }
+
+    val scope = CoroutineScope(
+    Dispatchers.IO + SupervisorJob() +
+            CoroutineExceptionHandler { coroutineContext, throwable ->
+                println("CoroutineExceptionHandler 捕获异常: $throwable")
+                throwable.printStackTrace()
+            }
     )
 
     data class UpdateResult(var sum: UInt)
@@ -182,51 +236,43 @@ class GachaRecorder(private val database: Database) {
         val nickName: String,
         val hgToken: ArkNights.HgToken,
     )
-    fun mainLoop(
-        onBegin: suspend () -> Unit = {},
-        onEnd: suspend (UpdateResult) -> Unit = {},
-        onError: suspend (Throwable) -> Unit = {},
-        onUser: suspend ( ctx: OnUserContext, nextFunc: suspend (OnUserContext)->UInt ) -> UInt = { ctx, nextFunc -> nextFunc(ctx) },
+
+    suspend fun mainLoop(
+
         delayTime: suspend () -> Duration = { 2.minutes }
     ) {
-        scope.launch {
-            while (true) {
-                onBegin()
-
-                val hgTokenMap = transaction (database) {
-                    UserTable.select(UserTable.hgToken, UserTable.nickName).where {
-                        UserTable.expired eq false
-                    }.map {
-                        ArkNights.HgToken(content = it[UserTable.hgToken]) to it[UserTable.nickName]
-                    }
-                }.shuffled()
-                val total = hgTokenMap.sumOf {
-                    val nextFunc: suspend (OnUserContext) -> UInt = { ctx ->
-                        try {
-                            updateGacha(ctx.hgToken)
-                        } catch (e: Throwable) {
-                            onError(e)
-                            0u
-                        }
-                    }
-                    val (hgToken, nickName) = it
-                    val result = onUser(OnUserContext(nickName, hgToken), nextFunc)
-                    delay(delayTime())
-                    result
+        while (true) {
+            val roundBeginTime = Clock.System.now()
+            logger.info("开始抓取用户数据")
+            val hgTokenMap = transaction(database) {
+                UserTable.select(UserTable.hgToken, UserTable.nickName).where {
+                    UserTable.expired eq false
+                }.map {
+                    ArkNights.HgToken(content = it[UserTable.hgToken]) to it[UserTable.nickName]
                 }
-                onEnd(UpdateResult(total))
+            }.shuffled()
+            val total = hgTokenMap.sumOf {
+                val (hgToken, nickName) = it
+                    logger.info("更新用户数据, nickName: $nickName")
+                val result = try {
+                    updateGacha(hgToken)
+                } catch (e: Throwable) {
+                    logger.error("更新用户数据失败", e)
+                    0u
+                }
+                delay(delayTime())
+                result
             }
+            logger.info("本轮更新用户数据, total: $total")
+            logger.info("本轮更新用户数据, 耗时: ${Clock.System.now() - roundBeginTime}")
         }
     }
+
     fun mainLoopRunning() = run {
         val job = scope.coroutineContext[Job]
         requireNotNull(job)
         job.children.toList().associate {
             it.key.toString() to it.isActive
         }
-    }
-
-    fun cancel() {
-        scope
     }
 }

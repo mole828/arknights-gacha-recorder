@@ -52,21 +52,11 @@ fun Application.configureRouting() {
         password = dbPassword,
     )
     val service = GachaRecorder(database = db)
-    var lastBeginTime = Clock.System.now()
-    service.mainLoop(onBegin = {
-        log.info("begin record round")
-        lastBeginTime = Clock.System.now()
-    }, onEnd = { result ->
-        log.info("end record round, total: $result, spent: ${Clock.System.now() - lastBeginTime}")
-        delay(2.minutes)
-    }, onError = {
-        log.info("mainLoop 出现错误", it)
-    }, onUser = { ctx, nextFunc ->
-        log.info("开始抓取用户数据, nickName: ${ctx.nickName}")
-        val total = nextFunc(ctx)
-        log.info("更新用户数据, nickName: ${ctx.nickName}, total: $total")
-        total
-    })
+    monitor.subscribe(ServerReady) {
+        service.scope.launch {
+            service.mainLoop()
+        }
+    }
     routing {
         @Serializable
         data class HealthCheckStruct(

@@ -45,13 +45,13 @@ class ArkNightsApiTest {
 //
 //            api.login(u8Token)
             val pools = gachaApi.poolList(uid, u8Token, loginCookie)
-//            println(pools)
+            println(pools)
 //
             val re = gachaApi.history(
                 loginCookie = loginCookie,
                 u8Token = u8Token,
                 uid = uid,
-                pool = ArkNights.GachaApi.Pool("spring_fest", ""),
+                pool = pools.first(),
                 size = 10u,
                 gachaTs = "1737532727523".toULong(),
                 pos = 8u,

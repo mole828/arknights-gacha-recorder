@@ -8,4 +8,5 @@ services:
       - DATABASE_USER=root
       - DATABASE_PASSWORD=root
       - TZ=Asia/Shanghai
+      - OPEN_LOOP=true
     network_mode: host

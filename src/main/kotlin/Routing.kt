@@ -13,10 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.SortOrder
-import org.jetbrains.exposed.sql.andWhere
-import org.jetbrains.exposed.sql.selectAll
+import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.util.UUID
 import kotlin.uuid.Uuid
@@ -216,20 +213,23 @@ fun Application.configureRouting() {
 
             @Serializable
             data class Task (
-                val id: String,
+                val uid: ArkNights.Uid,
                 val hgToken: ArkNights.HgToken,
             )
             val taskList = mutableListOf<Task>()
             fun getTask(): Task {
                 if (taskList.isEmpty()) {
+                    log.info("reload taskList")
                     transaction {
                         GachaRecorder
                             .UserTable
                             .select(GachaRecorder.UserTable.uid, GachaRecorder.UserTable.hgToken)
-                            .forEach {
+                            .where {
+                                GachaRecorder.UserTable.expired eq false
+                            }.forEach {
                                 taskList.add(
                                     Task(
-                                        id = UUID.randomUUID().toString(),
+                                        uid = ArkNights.Uid(it[GachaRecorder.UserTable.uid]),
                                         hgToken = ArkNights.HgToken(it[GachaRecorder.UserTable.hgToken]),
                                     )
                                 )
@@ -253,7 +253,8 @@ fun Application.configureRouting() {
             data class TaskResult (
                 val uid: ArkNights.Uid,
                 val hgToken: ArkNights.HgToken,
-                val gachas: List<ArkNights.GachaApi.GachaInfo.Companion.DefaultImpl>
+                val gachas: List<ArkNights.GachaApi.GachaInfo.Companion.DefaultImpl>,
+                val expired: Boolean? = false,
             )
             post("/agent/task") {
                 val key = call.parameters["agentKey"]
@@ -261,6 +262,14 @@ fun Application.configureRouting() {
                 require(agentKey == key)
                 val body = call.receiveText()
                 val result = Json.decodeFromString<TaskResult>(body)
+                if (result.expired == true) {
+                    transaction {
+                        GachaRecorder.UserTable.update(
+                            where = {GachaRecorder.UserTable.uid eq result.uid.value},
+                            body = { it[GachaRecorder.UserTable.expired] = true }
+                        )
+                    }
+                }
                 log.info("agent 更新用户数据, total: ${result.gachas.size}")
                 transaction {
                     service.record(result.gachas.map {

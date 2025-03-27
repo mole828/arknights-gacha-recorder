@@ -142,9 +142,8 @@ interface ArkNights {
                     val body = resp.bodyAsText()
                     return json.decodeFromString<AppTokenResponse>(body).data
                 }
-                private val appTokenCache: com.example.tool.Cache<HgToken, AppToken> =
-                    com.example.tool.Cache.Companion.MemCache(cacheDuration) { hgToken -> _grantAppToken(hgToken) }
-                override suspend fun grantAppToken(hgToken: HgToken): AppToken = appTokenCache[hgToken]
+
+                override suspend fun grantAppToken(hgToken: HgToken): AppToken = _grantAppToken(hgToken)
 
                 private suspend fun _bindingList(appToken: AppToken): MultiAppBindingList {
                     val resp = ktorClient.get("https://binding-api-account-prod.hypergryph.com/account/binding/v1/binding_list") {
@@ -157,9 +156,8 @@ interface ArkNights {
                     val body = resp.bodyAsText()
                     return json.decodeFromString<BindingListResponse>(body).data
                 }
-                private val bindingListCache: com.example.tool.Cache<AppToken, MultiAppBindingList> =
-                    com.example.tool.Cache.Companion.MemCache(cacheDuration) { appToken -> _bindingList(appToken) }
-                override suspend fun bindingList(appToken: AppToken): MultiAppBindingList = bindingListCache[appToken]
+
+                override suspend fun bindingList(appToken: AppToken): MultiAppBindingList = _bindingList(appToken)
 
                 private suspend fun _u8TokenByUid(appToken: AppToken, uid: Uid): U8Token {
                     val resp = ktorClient.post("https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid") {
@@ -179,9 +177,8 @@ interface ArkNights {
                     requireNotNull(re.data)
                     return re.data
                 }
-                private val u8TokenByUidCache: com.example.tool.Cache<Pair<AppToken, Uid>, U8Token> =
-                    com.example.tool.Cache.Companion.MemCache(cacheDuration) { (appToken, uid) -> _u8TokenByUid(appToken, uid) }
-                override suspend fun u8TokenByUid(appToken: AppToken, uid: Uid): U8Token = u8TokenByUidCache[appToken to uid]
+
+                override suspend fun u8TokenByUid(appToken: AppToken, uid: Uid): U8Token = _u8TokenByUid(appToken, uid)
 
                 override suspend fun login(u8Token: U8Token): LoginCookie {
                     val resp = ktorClient.post("https://ak.hypergryph.com/user/api/role/login") {

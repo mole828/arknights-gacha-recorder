@@ -1,15 +1,15 @@
 package com.example
 
 import com.example.api.ArkNights
+import com.example.api.ArkNights.GachaApi.GachaListData
 import com.example.service.GachaRecorder
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -18,7 +18,8 @@ import org.jetbrains.exposed.sql.SortOrder
 import org.jetbrains.exposed.sql.andWhere
 import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
-import kotlin.time.Duration.Companion.minutes
+import java.util.UUID
+import kotlin.uuid.Uuid
 
 fun Application.configureRouting() {
     @Serializable
@@ -62,6 +63,8 @@ fun Application.configureRouting() {
             }
         }
     }
+    val agentKey = System.getenv()["AGENT_KEY"]
+
     routing {
         @Serializable
         data class HealthCheckStruct(
@@ -202,6 +205,72 @@ fun Application.configureRouting() {
                 log.info("update: $total")
             }
             call.respond(mapOf("msg" to "ok", "token" to hgToken.content))
+        }
+
+        if (agentKey != null) {
+            log.info("agentKey: $agentKey")
+            val agentList = mutableListOf<String>()
+            get("/agent/status") {
+                call.respond(agentList)
+            }
+
+            @Serializable
+            data class Task (
+                val id: String,
+                val hgToken: ArkNights.HgToken,
+            )
+            val taskList = mutableListOf<Task>()
+            fun getTask(): Task {
+                if (taskList.isEmpty()) {
+                    transaction {
+                        GachaRecorder
+                            .UserTable
+                            .select(GachaRecorder.UserTable.uid, GachaRecorder.UserTable.hgToken)
+                            .forEach {
+                                taskList.add(
+                                    Task(
+                                        id = UUID.randomUUID().toString(),
+                                        hgToken = ArkNights.HgToken(it[GachaRecorder.UserTable.hgToken]),
+                                    )
+                                )
+                            }
+                    }
+                    taskList.shuffle()
+                }
+                val task = taskList.removeFirst()
+                return task
+            }
+
+            get("/agent/task") {
+                val key = call.parameters["agentKey"]
+                requireNotNull(key)
+                require(agentKey == key)
+                val task = getTask()
+                call.respond(task)
+            }
+
+            @Serializable
+            data class TaskResult (
+                val uid: ArkNights.Uid,
+                val hgToken: ArkNights.HgToken,
+                val gachas: List<ArkNights.GachaApi.GachaInfo.Companion.DefaultImpl>
+            )
+            post("/agent/task") {
+                val key = call.parameters["agentKey"]
+                requireNotNull(key)
+                require(agentKey == key)
+                val body = call.receiveText()
+                val result = Json.decodeFromString<TaskResult>(body)
+                transaction {
+                    service.record(result.gachas.map {
+                        ArkNights.GachaApi.Gacha.from(
+                            uid = result.uid,
+                            gachaInfo = it,
+                        )
+                    })
+                }
+                call.respond(mapOf("msg" to "ok"))
+            }
         }
 
 

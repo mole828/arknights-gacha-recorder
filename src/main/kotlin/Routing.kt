@@ -265,7 +265,7 @@ fun Application.configureRouting() {
                 if (result.expired == true) {
                     transaction {
                         GachaRecorder.UserTable.update(
-                            where = {GachaRecorder.UserTable.uid eq result.uid.value},
+                            where = {GachaRecorder.UserTable.hgToken eq result.hgToken.content},
                             body = { it[GachaRecorder.UserTable.expired] = true }
                         )
                     }

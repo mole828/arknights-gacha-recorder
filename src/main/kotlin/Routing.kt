@@ -261,6 +261,7 @@ fun Application.configureRouting() {
                 require(agentKey == key)
                 val body = call.receiveText()
                 val result = Json.decodeFromString<TaskResult>(body)
+                log.info("agent 更新用户数据, total: ${result.gachas.size}")
                 transaction {
                     service.record(result.gachas.map {
                         ArkNights.GachaApi.Gacha.from(

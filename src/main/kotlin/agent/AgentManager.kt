@@ -9,22 +9,29 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import kotlin.math.log
 
 @Serializable
 sealed interface MessageTemplate {
     @Serializable
+    @SerialName("msg")
     data class Msg(val msg: String) : MessageTemplate
     @Serializable
+    @SerialName("auth")
     data class Auth(val agentKey: String) : MessageTemplate
     @Serializable
-    data class Task(val task: ArkNights.HgToken) : MessageTemplate
+    @SerialName("task")
+    data class Task(val hgToken: ArkNights.HgToken, val uid: Uid) : MessageTemplate
     @Serializable
-    data class TaskResult(val result: List<ArkNights.GachaApi.GachaInfo.Companion.DefaultImpl>, val uid: Uid) : MessageTemplate
+    @SerialName("task_result")
+    data class TaskResult(val result: List<ArkNights.GachaApi.GachaInfo.Companion.DefaultImpl>, val uid: Uid, val hgToken: ArkNights.HgToken) : MessageTemplate
+    @Serializable
+    @SerialName("expired")
+    data class Expired(val hgToken: ArkNights.HgToken) : MessageTemplate
 }
 
 interface BasePeer {

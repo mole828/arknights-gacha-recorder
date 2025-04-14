@@ -6,6 +6,7 @@ import agent.WebSocketAgent
 import api.ArkNights
 import api.Uid
 import com.example.service.GachaRecorder
+import com.example.service.GachaRecorder.UserTable
 import io.ktor.server.application.log
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
@@ -21,8 +22,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
+import org.jetbrains.exposed.sql.updateReturning
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.minutes
 
@@ -118,15 +121,44 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder) {
                 is MessageTemplate.TaskResult -> {
                     log.info("收到任务结果: ${msg.result}")
                     service.record(msg.result.map { ArkNights.GachaApi.Gacha.from(uid = msg.uid, gachaInfo = it) })
+                    transaction {
+                        UserTable.update(
+                            where = { UserTable.hgToken eq msg.hgToken.content },
+                            body = {
+                                it[UserTable.expired] = false
+                            },
+                        )
+                    }
                     scope.launch {
                         delay(5.minutes)
-                        agent.send(MessageTemplate.Task(getTask().hgToken))
+                        val task = getTask()
+                        agent.send(MessageTemplate.Task(
+                            hgToken = task.hgToken,
+                            uid = task.uid,
+                        ))
+                    }
+                }
+                is MessageTemplate.Expired -> {
+                    transaction {
+                        UserTable.update(
+                            where = { UserTable.hgToken eq msg.hgToken.content },
+                            body = {
+                                it[UserTable.expired] = true
+                            },
+                        )
                     }
                 }
                 else -> {}
             }
         }
         log.info("开始派发任务")
+
+        agent.send(getTask().let {
+            MessageTemplate.Task(
+                hgToken = it.hgToken,
+                uid = it.uid,
+            )
+        })
         agent.done.await()
     }
 }

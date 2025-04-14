@@ -1,5 +1,6 @@
 package com.example.api
 
+import api.ArkNights
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import java.io.File

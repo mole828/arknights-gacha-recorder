@@ -39,6 +39,7 @@ dependencies {
 
     implementation("io.ktor:ktor-client-core")
     implementation("io.ktor:ktor-client-cio")
+    implementation("io.ktor:ktor-server-websockets")
 
     val exposedVersion: String = "0.59.0" // by project
     dependencies {

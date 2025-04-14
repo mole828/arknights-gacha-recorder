@@ -1,6 +1,7 @@
 package com.example.service
 
-import com.example.api.ArkNights
+import api.ArkNights
+import api.Uid
 import kotlinx.coroutines.*
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.*
@@ -59,9 +60,9 @@ class GachaRecorder(private val database: Database) {
     fun upsert(accountInfo: ArkNights.AccountInfo, hgToken: ArkNights.HgToken) {
         transaction(database) {
             UserTable.upsert(
-                where = { UserTable.uid eq accountInfo.uid.value },
+                where = { UserTable.uid eq accountInfo.uid },
                 body = { row ->
-                    row[UserTable.uid] = accountInfo.uid.value
+                    row[UserTable.uid] = accountInfo.uid
                     row[UserTable.hgToken] = hgToken.content
 
                     row[UserTable.nickName] = accountInfo.nickName
@@ -79,7 +80,7 @@ class GachaRecorder(private val database: Database) {
     fun update(accountInfo: ArkNights.AccountInfo) {
         transaction(database) {
             UserTable.update(
-                where = { UserTable.uid eq accountInfo.uid.value },
+                where = { UserTable.uid eq accountInfo.uid },
                 body = { row ->
                     row[UserTable.nickName] = accountInfo.nickName
                     row[UserTable.channelMasterId] = accountInfo.channelMasterId
@@ -92,10 +93,10 @@ class GachaRecorder(private val database: Database) {
         }
     }
 
-    private fun expire(uid: ArkNights.Uid) {
+    private fun expire(uid: Uid) {
         transaction(database) {
             UserTable.update(
-                where = { UserTable.uid eq uid.value },
+                where = { UserTable.uid eq uid },
                 body = { row ->
                     row[UserTable.expired] = true
                 }
@@ -114,10 +115,10 @@ class GachaRecorder(private val database: Database) {
         }
     }
 
-    fun exists(uid: ArkNights.Uid, gachaTs: ULong, pos: UInt): Boolean {
+    fun exists(uid: Uid, gachaTs: ULong, pos: UInt): Boolean {
         return transaction(database) {
             GachaTable.select(GachaTable.uid).where {
-                (GachaTable.uid eq uid.value).and(GachaTable.gachaTs eq gachaTs).and(GachaTable.pos eq pos)
+                (GachaTable.uid eq uid).and(GachaTable.gachaTs eq gachaTs).and(GachaTable.pos eq pos)
             }.count() > 0
         }
     }
@@ -128,7 +129,7 @@ class GachaRecorder(private val database: Database) {
                 return@transaction 0u
             }
             GachaTable.insert {
-                it[GachaTable.uid] = gacha.uid.value
+                it[GachaTable.uid] = gacha.uid
                 it[GachaTable.gachaTs] = gacha.gachaTs
                 it[GachaTable.pos] = gacha.pos
 
@@ -151,7 +152,7 @@ class GachaRecorder(private val database: Database) {
     inner class UserUpdateTask(
         val hgToken: ArkNights.HgToken,
     ) {
-        var uid: ArkNights.Uid private set
+        var uid: Uid private set
         var nickName: String private set
         var u8Token: ArkNights.U8Token private set
         var loginCookie: ArkNights.LoginCookie private set

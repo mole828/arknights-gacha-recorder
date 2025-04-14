@@ -1,4 +1,4 @@
-package com.example.api
+package api
 
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
@@ -14,6 +14,11 @@ import org.slf4j.LoggerFactory
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.seconds
+
+//    @JvmInline
+//    @Serializable
+//    value class Uid(val value: String)
+typealias Uid = String
 
 interface ArkNights {
     val logger: org.slf4j.Logger get() = LoggerFactory.getLogger(javaClass)
@@ -32,9 +37,6 @@ interface ArkNights {
         }
     }
 
-    @JvmInline
-    @Serializable
-    value class Uid(val value: String)
     @Serializable
     data class HgToken (val content: String) {
         // 获取token: https://web-api.hypergryph.com/account/info/hg
@@ -165,7 +167,7 @@ interface ArkNights {
                         }
                         setBody(json.encodeToString(mapOf(
                             "token" to appToken.token,
-                            "uid" to uid.value.toString(),
+                            "uid" to uid,
                         )))
                     }
                     val body = resp.bodyAsText()
@@ -213,7 +215,7 @@ interface ArkNights {
         )
         suspend fun poolList(uid: Uid, u8Token: U8Token, loginCookie: LoginCookie): List<Pool> {
             val resp = ktorClient.get("https://ak.hypergryph.com/user/api/inquiry/gacha/cate") {
-                parameter("uid", uid.value)
+                parameter("uid", uid)
                 headers {
                     append("X-Role-Token", u8Token.token)
                     append("cookie", cookie(mapOf(loginCookie.toPair())))

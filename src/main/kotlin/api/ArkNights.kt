@@ -1,6 +1,5 @@
 package com.example.api
 
-import fuel.FuelBuilder
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.cookies.*

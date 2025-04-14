@@ -39,7 +39,6 @@ dependencies {
 
     implementation("io.ktor:ktor-client-core")
     implementation("io.ktor:ktor-client-cio")
-    implementation("com.github.kittinunf.fuel:fuel:3.0.0-alpha04")
 
     val exposedVersion: String = "0.59.0" // by project
     dependencies {

@@ -8,7 +8,7 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -25,28 +25,45 @@ sealed interface MessageTemplate {
     data class Auth(val agentKey: String) : MessageTemplate
     @Serializable
     @SerialName("task")
-    data class Task(val hgToken: ArkNights.HgToken, val uid: Uid) : MessageTemplate
+    data class Task(val hgToken: ArkNights.HgToken, val uid: Uid?) : MessageTemplate
     @Serializable
     @SerialName("task_result")
     data class TaskResult(val result: List<ArkNights.GachaApi.GachaInfo.Companion.DefaultImpl>, val uid: Uid, val hgToken: ArkNights.HgToken) : MessageTemplate
+
     @Serializable
     @SerialName("expired")
     data class Expired(val hgToken: ArkNights.HgToken) : MessageTemplate
+    @Serializable
+    @SerialName("token_valid")
+    data class TokenValid(val uid: Uid, val hgToken: ArkNights.HgToken) : MessageTemplate
+    @Serializable
+    @SerialName("token_invalid")
+    data class TokenInvalid(val hgToken: ArkNights.HgToken, val msg: String) : MessageTemplate
+
+    @Serializable
+    @SerialName("user_info")
+    data class UserInfo(val info: ArkNights.AccountInfo, val hgToken: ArkNights.HgToken) : MessageTemplate
 }
+
+
 
 interface BasePeer {
     suspend fun send(msg: MessageTemplate)
-    var onMessage: suspend (MessageTemplate) -> Unit
+    val onMessageActions: MutableList<suspend (MessageTemplate) -> Unit>
+    val scope: CoroutineScope
+    suspend fun onMessage (msg: MessageTemplate): Unit {
+        onMessageActions.forEach { scope.async{ it(msg) } }
+    }
 }
 
 interface Agent : BasePeer {
     // for server use
     suspend fun waitAuth(agentKey: String) {
-        val oldOnMessage = onMessage
+
         var authed = CompletableDeferred<Boolean>()
-        this.onMessage = {
-            if (it is MessageTemplate.Auth) {
-                if (it.agentKey == agentKey) {
+        val fn: suspend (MessageTemplate) -> Unit = { msg ->
+            if (msg is MessageTemplate.Auth) {
+                if (msg.agentKey == agentKey) {
                     send(MessageTemplate.Msg("auth success"))
                     authed.complete(true)
                 } else {
@@ -56,10 +73,16 @@ interface Agent : BasePeer {
                 send(MessageTemplate.Msg("not auth"))
             }
         }
-        if(authed.await().not()) {
-            throw Exception("auth fail")
+        try {
+            this.onMessageActions.add(fn)
+            if(authed.await().not()) {
+                throw Exception("auth fail")
+            }
+        } catch (e: Throwable) {
+            throw e
+        } finally {
+            this.onMessageActions.remove(fn)
         }
-        this.onMessage = oldOnMessage
     }
 }
 interface Server : BasePeer
@@ -67,40 +90,27 @@ interface Server : BasePeer
 class WebSocketAgent(val session: WebSocketSession) : Agent {
     companion object {
         val json = Json
-        val scope = CoroutineScope(Dispatchers.Default)
+        private val scope = CoroutineScope(Dispatchers.Default)
         val logger = LoggerFactory.getLogger(WebSocketAgent::class.java)
     }
+    override val scope = Companion.scope
     override suspend fun send(msg: MessageTemplate) {
         val msgStr = json.encodeToString(msg)
         session.send(Frame.Text(msgStr))
     }
-    override var onMessage: suspend (MessageTemplate) -> Unit = { msg ->
-        println(msg)
-    }
-    val done = CompletableDeferred<Unit>()
-
-    init {
-        scope.launch {
-            logger.info("agent start")
-            try {
-                for (frame in session.incoming) {
-                    frame as? Frame.Text ?: continue
-                    val receivedText = frame.readText()
-                    val msg = json.decodeFromString<MessageTemplate>(receivedText)
-                    onMessage(msg)
-                }
-            } catch (e: Throwable) {
-                println(e)
-            } finally {
-                done.complete(Unit)
+    override val onMessageActions = mutableListOf<suspend (MessageTemplate) -> Unit>()
+    val reading = scope.async {
+        logger.info("agent start reading")
+        try {
+            for (frame in session.incoming) {
+                frame as? Frame.Text ?: continue
+                val receivedText = frame.readText()
+                val msg = json.decodeFromString<MessageTemplate>(receivedText)
+                onMessage(msg)
             }
-            logger.info("agent end")
+        } catch (e: Throwable) {
+            println(e)
         }
-    }
-}
-
-object AgentManager {
-    fun WebSocketSession.agent(): Agent {
-        return WebSocketAgent(this)
+        logger.info("agent end reading")
     }
 }

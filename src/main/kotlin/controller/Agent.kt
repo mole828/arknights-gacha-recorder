@@ -1,52 +1,47 @@
 package com.example.controller
 
-import agent.AgentManager
+import agent.Agent
 import agent.MessageTemplate
 import agent.WebSocketAgent
 import api.ArkNights
 import api.Uid
 import com.example.service.GachaRecorder
 import com.example.service.GachaRecorder.UserTable
-import io.ktor.server.application.log
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Routing
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.websocket.webSocket
-import io.ktor.websocket.WebSocketSession
-import io.ktor.websocket.readBytes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.update
-import org.jetbrains.exposed.sql.updateReturning
+import org.jetbrains.exposed.sql.upsert
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.minutes
 
-fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotlin.time.Duration = 2.minutes) {
+fun Routing.agentPart(
+    agentKey: String,
+    service: GachaRecorder,
+    delayTime: kotlin.time.Duration = 2.minutes
+): Pair<MutableList<Agent>, MutableList<MessageTemplate.Task>> {
     val log = LoggerFactory.getLogger("AgentRoute")
 
     log.info("agentKey: $agentKey")
     log.info("delayTime: $delayTime")
 
-    val agentList = mutableListOf<String>()
+    val agentList = mutableListOf<Agent>()
     get("/agent/status") {
         call.respond(agentList)
     }
 
-    @Serializable
-    data class Task (
-        val uid: Uid,
-        val hgToken: ArkNights.HgToken,
-    )
-    val taskList = mutableListOf<Task>()
-    fun getTask(): Task {
+    val taskList = mutableListOf<MessageTemplate.Task>()
+    fun getTask(): MessageTemplate.Task {
         if (taskList.isEmpty()) {
             log.info("reload taskList")
             transaction {
@@ -57,7 +52,7 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotli
                         GachaRecorder.UserTable.expired eq false
                     }.forEach {
                         taskList.add(
-                            Task(
+                            MessageTemplate.Task(
                                 uid = it[GachaRecorder.UserTable.uid],
                                 hgToken = ArkNights.HgToken(it[GachaRecorder.UserTable.hgToken]),
                             )
@@ -94,7 +89,7 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotli
         if (result.expired == true) {
             transaction {
                 GachaRecorder.UserTable.update(
-                    where = {GachaRecorder.UserTable.uid eq result.uid},
+                    where = {GachaRecorder.UserTable.hgToken eq result.hgToken.content},
                     body = { it[GachaRecorder.UserTable.expired] = true }
                 )
             }
@@ -117,7 +112,8 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotli
     webSocket("/agent/ws") {
         val agent = WebSocketAgent(this)
         agent.waitAuth(agentKey)
-        agent.onMessage = { msg ->
+        agentList.add(agent)
+        val fn: suspend (MessageTemplate) -> Unit = { msg ->
             log.info("收到消息: ${msg.toString().substring(0..20)}")  // 打印前20个字符
             when(msg) {
                 is MessageTemplate.TaskResult -> {
@@ -150,17 +146,35 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotli
                         )
                     }
                 }
+                is MessageTemplate.UserInfo -> {
+                    log.info("更新用户信息: ${msg.info}")
+                    transaction {
+                        UserTable.upsert {
+                            it[UserTable.uid] = msg.info.uid
+                            it[UserTable.nickName] = msg.info.nickName
+                            it[UserTable.channelMasterId] = msg.info.channelMasterId
+                            it[UserTable.channelName] = msg.info.channelName
+                            it[UserTable.isDefault] = msg.info.isDefault
+                            it[UserTable.isDeleted] = msg.info.isDeleted
+                            it[UserTable.isOfficial] = msg.info.isOfficial
+                            it[UserTable.hgToken] = msg.hgToken.content
+                        }
+                    }
+                }
                 else -> {}
             }
         }
+        agent.onMessageActions.add(fn)
         log.info("开始派发任务")
-
         agent.send(getTask().let {
             MessageTemplate.Task(
                 hgToken = it.hgToken,
                 uid = it.uid,
             )
         })
-        agent.done.await()
+        agent.reading.await()
+        agentList.remove(agent)
     }
+
+    return agentList to taskList
 }

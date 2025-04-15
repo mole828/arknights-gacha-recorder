@@ -72,6 +72,7 @@ fun Application.configureRouting() {
         }
     }
     val agentKey = System.getenv()["AGENT_KEY"]
+    requireNotNull(agentKey)
     val agentPool = mutableListOf<Any>()
 
     routing {
@@ -93,12 +94,9 @@ fun Application.configureRouting() {
         }
 
 
+        val (agentList, taskList) = agentPart(agentKey, service)
 
-        userPart(db)
-
-        agentKey?.let {
-            agentPart(agentKey, service)
-        }
+        userPart(db = db, agentList = agentList, taskList = taskList)
 
         webSocket("/echo") {
             // 不能让函数体结束, 调用结束会关闭连接

@@ -138,6 +138,11 @@ fun Routing.userPart(db: Database, taskList: MutableList<Task>, agentList: List<
 //            val total = service.updateGacha(hgToken)
 //            log.info("update: $total")
 //        }
+        val hgToken = try {
+            Json.decodeFromString<ArkNights.HgTokenResponse>(tokenPerhaps).data
+        } catch (e: Throwable) {
+            ArkNights.HgToken(tokenPerhaps)
+        }
         val agent = agentList.randomOrNull() ?: run {
             call.respond(mapOf("msg" to "提交成功, 请等待记录员处理"))
             return@post
@@ -166,7 +171,7 @@ fun Routing.userPart(db: Database, taskList: MutableList<Task>, agentList: List<
             }
         }
         agent.onMessageActions.add(fn)
-        agent.send(MessageTemplate.Task(ArkNights.HgToken(tokenPerhaps), null))
+        agent.send(MessageTemplate.Task(hgToken, null))
 
         val returnData = withTimeoutOrNull(10.seconds) {
             when(tokenValid.await()) {

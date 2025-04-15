@@ -29,10 +29,12 @@ import org.jetbrains.exposed.sql.updateReturning
 import org.slf4j.LoggerFactory
 import kotlin.time.Duration.Companion.minutes
 
-fun Routing.agentPart(agentKey: String, service: GachaRecorder) {
+fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotlin.time.Duration = 2.minutes) {
     val log = LoggerFactory.getLogger("AgentRoute")
 
     log.info("agentKey: $agentKey")
+    log.info("delayTime: $delayTime")
+
     val agentList = mutableListOf<String>()
     get("/agent/status") {
         call.respond(agentList)
@@ -130,7 +132,7 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder) {
                         )
                     }
                     scope.launch {
-                        delay(5.minutes)
+                        delay(delayTime)
                         val task = getTask()
                         agent.send(MessageTemplate.Task(
                             hgToken = task.hgToken,

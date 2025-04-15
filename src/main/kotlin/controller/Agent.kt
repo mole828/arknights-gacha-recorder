@@ -118,10 +118,10 @@ fun Routing.agentPart(agentKey: String, service: GachaRecorder, delayTime: kotli
         val agent = WebSocketAgent(this)
         agent.waitAuth(agentKey)
         agent.onMessage = { msg ->
-            log.info("收到消息: $msg")
+            log.info("收到消息: ${msg.toString().substring(0..20)}")  // 打印前20个字符
             when(msg) {
                 is MessageTemplate.TaskResult -> {
-                    log.info("收到任务结果: ${msg.result}")
+                    log.info("收到任务结果 ${msg.uid}, 共计 ${msg.result.size} 条")
                     service.record(msg.result.map { ArkNights.GachaApi.Gacha.from(uid = msg.uid, gachaInfo = it) })
                     transaction {
                         UserTable.update(

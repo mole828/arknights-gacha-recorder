@@ -109,7 +109,7 @@ class WebSocketAgent(val session: WebSocketSession) : Agent {
                 onMessage(msg)
             }
         } catch (e: Throwable) {
-            println(e)
+            e.printStackTrace()
         }
         logger.info("agent end reading")
     }

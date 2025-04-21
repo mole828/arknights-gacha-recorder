@@ -128,6 +128,7 @@ fun Routing.agentPart(
                         )
                     }
                     scope.launch {
+                        log.info("agent delay ${delayTime.inWholeMinutes} minutes")
                         delay(delayTime)
                         val task = getTask()
                         agent.send(MessageTemplate.Task(

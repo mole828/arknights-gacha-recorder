@@ -15,6 +15,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.websocket.webSocket
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -116,16 +117,6 @@ fun Routing.agentPart(
             when(msg) {
                 is MessageTemplate.TaskResult -> {
                     log.info("收到任务结果 ${msg.uid}, 共计 ${msg.result.size} 条")
-                    service.record(msg.result.map { ArkNights.GachaApi.Gacha.from(uid = msg.uid, gachaInfo = it) })
-                    transaction {
-                        UserTable.update(
-                            where = { UserTable.hgToken eq msg.hgToken.content },
-                            body = {
-                                it[UserTable.expired] = false
-                            },
-                        )
-                    }
-                    log.info("完成结果记录, 准备开启延迟进程")
                     launch {
                         log.info("代理人延迟 ${delayTime.inWholeMinutes} 分钟")
                         delay(delayTime)
@@ -135,6 +126,19 @@ fun Routing.agentPart(
                             uid = task.uid,
                         ))
                     }
+                    async {
+                        val hasRecord = service.record(msg.result.map { ArkNights.GachaApi.Gacha.from(uid = msg.uid, gachaInfo = it) })
+                        log.info("完成记录 $hasRecord 条")
+                        transaction {
+                            UserTable.update(
+                                where = { UserTable.hgToken eq msg.hgToken.content },
+                                body = {
+                                    it[UserTable.expired] = false
+                                },
+                            )
+                        }
+                        log.info("重制 hgToken 过期状态, 准备开启延迟进程")
+                    }.await()
                 }
                 is MessageTemplate.Expired -> {
                     transaction {

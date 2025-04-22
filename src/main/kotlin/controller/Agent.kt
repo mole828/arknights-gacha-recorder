@@ -107,8 +107,6 @@ fun Routing.agentPart(
         call.respond(mapOf("msg" to "ok"))
     }
 
-
-    val scope = CoroutineScope(Dispatchers.Default)
     webSocket("/agent/ws") {
         val agent = WebSocketAgent(this)
         agent.waitAuth(agentKey)
@@ -127,8 +125,9 @@ fun Routing.agentPart(
                             },
                         )
                     }
-                    scope.launch {
-                        log.info("agent delay ${delayTime.inWholeMinutes} minutes")
+                    log.info("完成结果记录, 准备开启延迟进程")
+                    launch {
+                        log.info("代理人延迟 ${delayTime.inWholeMinutes} 分钟")
                         delay(delayTime)
                         val task = getTask()
                         agent.send(MessageTemplate.Task(
